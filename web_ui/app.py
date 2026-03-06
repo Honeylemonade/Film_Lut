@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import uuid
 from datetime import datetime
@@ -17,6 +18,7 @@ LUT_DIR = ROOT / "luts"
 CUSTOM_LUT_DIR = ROOT / "custom_luts"
 EXPORTS_DIR = ROOT / "exports"
 UPLOADS_TMP_DIR = ROOT / "uploads_tmp"
+FAVORITES_FILE = ROOT / ".lut_favorites.json"
 
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 ALLOWED_LUT_EXT = {".cube"}
@@ -24,6 +26,7 @@ ALLOWED_LUT_EXT = {".cube"}
 app = Flask(__name__, template_folder="static", static_folder="static")
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
+FAVORITES_LOCK = threading.Lock()
 
 
 def safe_name(value: str) -> str:
@@ -66,6 +69,25 @@ def collect_luts() -> list[dict]:
     return items
 
 
+def load_favorite_ids() -> set[str]:
+    if not FAVORITES_FILE.exists():
+        return set()
+    try:
+        data = json.loads(FAVORITES_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return set()
+        return {str(item) for item in data}
+    except Exception:
+        return set()
+
+
+def save_favorite_ids(ids: set[str]) -> None:
+    FAVORITES_FILE.write_text(
+        json.dumps(sorted(ids), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def lut_id_to_path(lut_id: str) -> Path | None:
     if lut_id.startswith("builtin:"):
         rel = lut_id.removeprefix("builtin:")
@@ -90,6 +112,30 @@ def ensure_dirs() -> None:
     UPLOADS_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def open_folder(path: Path) -> tuple[bool, str]:
+    if not path.exists():
+        return False, "目录不存在。"
+    if not path.is_dir():
+        return False, "路径不是目录。"
+
+    cmd: list[str] | None = None
+    if sys.platform.startswith("darwin"):
+        cmd = ["open", str(path)]
+    elif sys.platform.startswith("win"):
+        cmd = ["explorer", str(path)]
+    elif shutil.which("xdg-open"):
+        cmd = ["xdg-open", str(path)]
+
+    if cmd is None:
+        return False, "当前系统不支持自动打开目录。"
+
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
@@ -97,7 +143,97 @@ def index():
 
 @app.get("/api/luts")
 def api_luts():
-    return jsonify({"luts": collect_luts()})
+    with FAVORITES_LOCK:
+        favorite_ids = load_favorite_ids()
+
+    luts = collect_luts()
+    for item in luts:
+        item["favorite"] = item["id"] in favorite_ids
+    return jsonify({"luts": luts})
+
+
+@app.post("/api/favorites/bulk")
+def api_favorites_bulk():
+    payload = request.get_json(silent=True) or {}
+    lut_ids_raw = payload.get("lut_ids")
+    favorite_raw = payload.get("favorite")
+
+    if not isinstance(lut_ids_raw, list):
+        return jsonify({"error": "lut_ids 必须是数组。"}), 400
+    if not isinstance(favorite_raw, bool):
+        return jsonify({"error": "favorite 必须是布尔值。"}), 400
+
+    lut_ids = {str(item) for item in lut_ids_raw}
+    valid_ids = {item["id"] for item in collect_luts()}
+    lut_ids = {item for item in lut_ids if item in valid_ids}
+
+    with FAVORITES_LOCK:
+        favorites = load_favorite_ids()
+        if favorite_raw:
+            favorites.update(lut_ids)
+        else:
+            favorites.difference_update(lut_ids)
+        favorites.intersection_update(valid_ids)
+        save_favorite_ids(favorites)
+        result = sorted(favorites)
+
+    return jsonify({"favorites": result, "count": len(result)})
+
+
+@app.post("/api/luts/delete")
+def api_luts_delete():
+    payload = request.get_json(silent=True) or {}
+    lut_ids_raw = payload.get("lut_ids")
+    if not isinstance(lut_ids_raw, list):
+        return jsonify({"error": "lut_ids 必须是数组。"}), 400
+
+    lut_ids = [str(item) for item in lut_ids_raw]
+    deleted: list[str] = []
+    skipped_builtin: list[str] = []
+    skipped_invalid: list[str] = []
+
+    for lut_id in lut_ids:
+        if lut_id.startswith("builtin:"):
+            skipped_builtin.append(lut_id)
+            continue
+        p = lut_id_to_path(lut_id)
+        if p is None:
+            skipped_invalid.append(lut_id)
+            continue
+        try:
+            p.unlink()
+            deleted.append(lut_id)
+        except Exception:
+            skipped_invalid.append(lut_id)
+
+    valid_ids = {item["id"] for item in collect_luts()}
+    with FAVORITES_LOCK:
+        favorites = load_favorite_ids()
+        favorites.intersection_update(valid_ids)
+        save_favorite_ids(favorites)
+
+    return jsonify(
+        {
+            "deleted": deleted,
+            "deleted_count": len(deleted),
+            "skipped_builtin": skipped_builtin,
+            "skipped_invalid": skipped_invalid,
+        }
+    )
+
+
+@app.post("/api/open-output")
+def api_open_output():
+    payload = request.get_json(silent=True) or {}
+    path_raw = payload.get("path")
+    if not isinstance(path_raw, str) or not path_raw.strip():
+        return jsonify({"error": "path 参数不能为空。"}), 400
+
+    p = Path(path_raw).expanduser().resolve()
+    ok, err = open_folder(p)
+    if not ok:
+        return jsonify({"error": err}), 400
+    return jsonify({"ok": True})
 
 
 @app.post("/api/import-luts")

@@ -30,11 +30,6 @@ def safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", value)
 
 
-def quality_to_qv(quality: int) -> int:
-    quality = max(1, min(100, quality))
-    return int(round(31 - (quality - 1) * (29 / 99)))
-
-
 def grain_to_noise_strength(grain_strength: int) -> int:
     grain_strength = max(0, min(100, grain_strength))
     # ffmpeg noise strength: 0-100, practical range here is 0-30
@@ -139,8 +134,6 @@ def _process_job(
     saved_images: list[Path],
     lut_paths: list[Path],
     output_dir: Path,
-    quality: int,
-    qv: int,
     grain_strength: int,
     noise_strength: int,
     run_tmp: Path,
@@ -156,7 +149,7 @@ def _process_job(
         for image_path in saved_images:
             for lut_path in lut_paths:
                 lut_name = safe_name(lut_path.stem)
-                out_name = f"{safe_name(image_path.stem)}__{lut_name}.jpg"
+                out_name = f"{safe_name(image_path.stem)}__{lut_name}.png"
                 out_path = output_dir / out_name
                 escaped_lut_path = lut_path.as_posix().replace("'", "\\'")
                 filter_chain = f"lut3d=file='{escaped_lut_path}'"
@@ -170,10 +163,12 @@ def _process_job(
                     str(image_path),
                     "-vf",
                     filter_chain,
-                    "-q:v",
-                    str(qv),
+                    "-c:v",
+                    "png",
+                    "-compression_level",
+                    "0",
                     "-pix_fmt",
-                    "yuvj444p",
+                    "rgb24",
                     "-frames:v",
                     "1",
                     str(out_path),
@@ -204,8 +199,7 @@ def _process_job(
                     "total": total,
                     "success": success,
                     "failed": failed,
-                    "quality": quality,
-                    "ffmpeg_qv": qv,
+                    "output_format": "png",
                     "grain_strength": grain_strength,
                     "ffmpeg_noise_strength": noise_strength,
                     "output_dir": str(output_dir.resolve()),
@@ -231,7 +225,6 @@ def api_process_start():
     images = request.files.getlist("images")
     selected_luts_raw = request.form.get("selected_luts", "[]")
     output_dir_raw = (request.form.get("output_dir", "") or "").strip()
-    quality_raw = request.form.get("quality", "95")
     grain_strength_raw = request.form.get("grain_strength", "0")
 
     try:
@@ -242,10 +235,6 @@ def api_process_start():
         return jsonify({"error": "selected_luts 参数格式错误。"}), 400
 
     try:
-        quality = int(quality_raw)
-    except ValueError:
-        return jsonify({"error": "quality 必须是 1-100 的整数。"}), 400
-    try:
         grain_strength = int(grain_strength_raw)
     except ValueError:
         return jsonify({"error": "grain_strength 必须是 0-100 的整数。"}), 400
@@ -254,8 +243,6 @@ def api_process_start():
         return jsonify({"error": "请至少上传 1 张图片。"}), 400
     if not selected_lut_ids:
         return jsonify({"error": "请至少选择 1 个 LUT。"}), 400
-    if quality < 1 or quality > 100:
-        return jsonify({"error": "quality 必须在 1-100 之间。"}), 400
     if grain_strength < 0 or grain_strength > 100:
         return jsonify({"error": "grain_strength 必须在 0-100 之间。"}), 400
 
@@ -288,7 +275,6 @@ def api_process_start():
         shutil.rmtree(run_tmp, ignore_errors=True)
         return jsonify({"error": "上传文件里没有有效图片格式。"}), 400
 
-    qv = quality_to_qv(quality)
     noise_strength = grain_to_noise_strength(grain_strength)
     total = len(saved_images) * len(lut_paths)
 
@@ -301,7 +287,7 @@ def api_process_start():
             "total": total,
             "success": 0,
             "failed": 0,
-            "quality": quality,
+            "output_format": "png",
             "grain_strength": grain_strength,
             "output_dir": str(output_dir.resolve()),
             "log_tail": [],
@@ -314,8 +300,6 @@ def api_process_start():
             saved_images,
             lut_paths,
             output_dir,
-            quality,
-            qv,
             grain_strength,
             noise_strength,
             run_tmp,

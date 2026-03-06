@@ -164,11 +164,8 @@
       <label>导出目录（本机路径，不填则自动生成）</label>
       <input id="outputDir" type="text" placeholder="例如: /Users/yourname/Desktop/exports" />
 
-      <label>JPG 质量（1-100）</label>
-      <div class="row">
-        <input id="quality" type="range" min="1" max="100" value="95" style="flex:1;" />
-        <input id="qualityNum" type="number" min="1" max="100" value="95" style="width:90px;" />
-      </div>
+      <label>输出格式</label>
+      <div class="muted">固定为无损 PNG（`compression_level=0`）</div>
 
       <label>胶片颗粒强度（0-100，0=关闭）</label>
       <div class="row">
@@ -202,8 +199,6 @@
     const lutSelectEl = document.getElementById('lutSelect');
     const lutInfoEl = document.getElementById('lutInfo');
     const outputDirEl = document.getElementById('outputDir');
-    const qualityEl = document.getElementById('quality');
-    const qualityNumEl = document.getElementById('qualityNum');
     const grainEl = document.getElementById('grain');
     const grainNumEl = document.getElementById('grainNum');
     const runBtn = document.getElementById('runBtn');
@@ -259,16 +254,6 @@
       imageInfoEl.textContent = files.length ? `已选择 ${files.length} 张图片` : '尚未选择图片';
     });
 
-    qualityEl.addEventListener('input', () => {
-      qualityNumEl.value = qualityEl.value;
-    });
-    qualityNumEl.addEventListener('input', () => {
-      let v = parseInt(qualityNumEl.value || '95', 10);
-      if (Number.isNaN(v)) v = 95;
-      v = Math.max(1, Math.min(100, v));
-      qualityNumEl.value = String(v);
-      qualityEl.value = String(v);
-    });
     grainEl.addEventListener('input', () => {
       grainNumEl.value = grainEl.value;
     });
@@ -333,21 +318,19 @@
         return;
       }
 
-      const quality = parseInt(qualityNumEl.value || '95', 10);
       const grainStrength = parseInt(grainNumEl.value || '0', 10);
       const outputDir = (outputDirEl.value || '').trim();
 
       const fd = new FormData();
       images.forEach(f => fd.append('images', f));
       fd.append('selected_luts', JSON.stringify(selectedLuts));
-      fd.append('quality', String(quality));
       fd.append('grain_strength', String(grainStrength));
       fd.append('output_dir', outputDir);
 
       setRunning(true);
       setProgress(0, 0, images.length * selectedLuts.length);
       resultEl.textContent = '处理中，请稍候...';
-      log(`开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, JPG 质量 ${quality}, 颗粒 ${grainStrength}`);
+      log(`开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, 输出无损 PNG, 颗粒 ${grainStrength}`);
 
       try {
         const startRes = await fetch('/api/process/start', { method: 'POST', body: fd });
@@ -373,7 +356,7 @@
               <div>总任务: <b>${data.total}</b></div>
               <div>成功: <b>${data.success}</b>，失败: <b>${data.failed}</b></div>
               <div>导出目录: <b>${data.output_dir}</b></div>
-              <div>质量: <b>${data.quality}</b>（ffmpeg q:v=${data.ffmpeg_qv}）</div>
+              <div>输出格式: <b>${(data.output_format || 'png').toUpperCase()}</b>（无损）</div>
               <div>颗粒: <b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
             `;
             log(`处理完成: 成功 ${data.success}，失败 ${data.failed}`);

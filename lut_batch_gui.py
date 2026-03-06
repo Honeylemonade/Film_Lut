@@ -20,7 +20,6 @@ class LutBatchApp:
         self.builtin_lut_dir = self.project_dir / "luts"
         self.custom_lut_dir = self.project_dir / "custom_luts"
         self.output_dir_var = tk.StringVar(value=str(self.project_dir / "exports"))
-        self.quality_var = tk.DoubleVar(value=95)
 
         self.image_paths: list[Path] = []
         self.lut_map: dict[str, Path] = {}
@@ -139,18 +138,10 @@ class LutBatchApp:
             row=0, column=2, sticky="w", padx=(0, 8), pady=8
         )
 
-        ttk.Label(export_frame, text="JPG 质量 (1-100):").grid(row=1, column=0, sticky="w", padx=8, pady=8)
-        quality_scale = ttk.Scale(
-            export_frame,
-            from_=1,
-            to=100,
-            variable=self.quality_var,
-            orient=tk.HORIZONTAL,
-            command=self._on_quality_change,
+        ttk.Label(export_frame, text="输出格式:").grid(row=1, column=0, sticky="w", padx=8, pady=8)
+        ttk.Label(export_frame, text="固定无损 PNG（compression_level=0）").grid(
+            row=1, column=1, columnspan=2, sticky="w", padx=(0, 8), pady=8
         )
-        quality_scale.grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=8)
-        self.quality_label = ttk.Label(export_frame, text=str(int(self.quality_var.get())))
-        self.quality_label.grid(row=1, column=2, sticky="w", padx=(0, 8), pady=8)
 
         action_row = ttk.Frame(export_frame)
         action_row.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(4, 10))
@@ -181,9 +172,6 @@ class LutBatchApp:
                 "缺少 FFmpeg",
                 "未检测到 ffmpeg，请先安装 ffmpeg 并确保命令可用。",
             )
-
-    def _on_quality_change(self, _value: str) -> None:
-        self.quality_label.config(text=str(int(self.quality_var.get())))
 
     def _log(self, message: str) -> None:
         self.log_text.configure(state="normal")
@@ -301,12 +289,6 @@ class LutBatchApp:
         return re.sub(r"[^A-Za-z0-9._-]+", "_", value)
 
     @staticmethod
-    def _quality_to_ffmpeg_qv(quality: int) -> int:
-        # ffmpeg MJPEG: q:v range roughly 2(best)-31(worst)
-        quality = max(1, min(100, quality))
-        return int(round(31 - (quality - 1) * (29 / 99)))
-
-    @staticmethod
     def _escape_ffmpeg_filter_path(path: Path) -> str:
         s = path.resolve().as_posix()
         return s.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
@@ -346,24 +328,19 @@ class LutBatchApp:
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        quality = int(round(self.quality_var.get()))
-        ffmpeg_qv = self._quality_to_ffmpeg_qv(quality)
-
         self.progress_var.set(0)
         self._set_running(True)
-        self._log(
-            f"开始批量处理: 图片 {len(images)} 张 x LUT {len(luts)} 个, 目标 JPG 质量 {quality} (ffmpeg q:v={ffmpeg_qv})"
-        )
+        self._log(f"开始批量处理: 图片 {len(images)} 张 x LUT {len(luts)} 个, 输出无损 PNG")
 
         self.worker = threading.Thread(
             target=self._run_batch,
-            args=(images, luts, output_dir, ffmpeg_qv),
+            args=(images, luts, output_dir),
             daemon=True,
         )
         self.worker.start()
         self.root.after(100, self._poll_queue)
 
-    def _run_batch(self, images: list[Path], luts: list[Path], output_dir: Path, ffmpeg_qv: int) -> None:
+    def _run_batch(self, images: list[Path], luts: list[Path], output_dir: Path) -> None:
         total = len(images) * len(luts)
         done = 0
         success = 0
@@ -378,7 +355,7 @@ class LutBatchApp:
                     else f"custom_{lut_path.name}"
                 )
 
-                out_name = f"{self._safe_name(image_path.stem)}__{self._safe_name(Path(lut_rel_name).stem)}.jpg"
+                out_name = f"{self._safe_name(image_path.stem)}__{self._safe_name(Path(lut_rel_name).stem)}.png"
                 out_path = output_dir / out_name
 
                 escaped_lut = self._escape_ffmpeg_filter_path(lut_path)
@@ -389,10 +366,12 @@ class LutBatchApp:
                     str(image_path),
                     "-vf",
                     f"lut3d=file='{escaped_lut}'",
-                    "-q:v",
-                    str(ffmpeg_qv),
+                    "-c:v",
+                    "png",
+                    "-compression_level",
+                    "0",
                     "-pix_fmt",
-                    "yuvj444p",
+                    "rgb24",
                     "-frames:v",
                     "1",
                     str(out_path),

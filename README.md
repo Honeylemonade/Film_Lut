@@ -7,12 +7,14 @@
 - 批量上传图片（支持多选）
 - 图片预览：单张大图预览，多张堆叠预览
 - 多选内置 LUT（读取 `luts/`）
-- 导入自定义 `.cube` LUT
+- 导入 `.cube` LUT（统一存放到 `luts/user_imports/`）
 - 支持删除自定义 LUT（内置 LUT 不可删除）
 - 批量处理（图片数 x LUT 数）
 - 导出无损 PNG（`compression_level=0`）
 - 支持 LUT 收藏标星（持久保存，下次打开可快速筛选/选择）
 - 支持胶片颗粒效果与强度调节（0-100）
+- 支持色散、暗角效果与强度调节（0-100）
+- 支持锐化、清晰度效果与强度调节（-100~100，支持降低）
 - 支持自定义导出目录
 - 导出完成后自动打开导出目录
 - 支持实时转换进度条（百分比 + 完成数/总数）
@@ -89,8 +91,7 @@ pyinstaller --onefile --add-data "web_ui/static:web_ui/static" web_ui/app.py
 
 ## 目录说明
 
-- `luts/`：内置 LUT 库
-- `custom_luts/`：导入的自定义 LUT
+- `luts/`：LUT 库（包含内置与导入，统一管理）
 - `exports/`：默认导出目录（当未手动指定导出目录时使用）
 - `uploads_tmp/`：运行时临时上传目录（任务结束后清理）
 - `web_ui/app.py`：后端服务

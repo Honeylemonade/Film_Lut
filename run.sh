@@ -27,9 +27,27 @@ echo "🚀 启动服务..."
 echo "📱 访问地址: http://127.0.0.1:8787"
 echo ""
 
+# 检查并释放 8787 端口
+if command -v lsof &> /dev/null; then
+    PID=$(lsof -t -i :8787 2>/dev/null)
+    if [ ! -z "$PID" ]; then
+        echo "⚠️  检测到 8787 端口已被占用，正在清理旧进程 (PID: $PID)..."
+        kill -9 $PID 2>/dev/null
+        sleep 1
+    fi
+fi
+
 # 在后台启动 Flask 应用
 python3 web_ui/app.py &
 FLASK_PID=$!
+
+# 捕获退出信号，确保后台进程被清理
+cleanup() {
+    echo "\n🛑 正在停止服务..."
+    kill $FLASK_PID 2>/dev/null
+    exit 0
+}
+trap cleanup SIGINT SIGTERM EXIT
 
 # 等待服务启动
 echo "⏳ 等待服务启动..."

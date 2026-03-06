@@ -221,6 +221,45 @@
       text-overflow: ellipsis;
       cursor: pointer;
     }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .compare-panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #f8fafc;
+      min-height: 420px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .compare-panel img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #0f172a;
+    }
+    .compare-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 999px;
+      z-index: 2;
+    }
+    .lut-row.is-active-preview {
+      outline: 1px solid #60a5fa;
+      background: #dbeafe;
+    }
     .progress-wrap {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -236,6 +275,8 @@
     }
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
+      .compare-panel { min-height: 320px; }
     }
   </style>
 </head>
@@ -248,9 +289,7 @@
         <h2>1) 上传图片（支持批量）</h2>
         <input id="images" type="file" accept="image/*" multiple />
         <div id="imageInfo" class="muted">尚未选择图片</div>
-        <div id="imagePreview" class="preview-zone">
-          <div class="preview-empty">选择图片后会在这里预览</div>
-        </div>
+        <div id="imagePreview" class="preview-zone"><div class="preview-empty">选择图片后会在这里预览</div></div>
 
         <h2>2) 导入自定义 LUT（.cube）</h2>
         <div class="row">
@@ -278,6 +317,20 @@
     </div>
 
     <div class="card stack" style="margin-top:16px;">
+      <h2>即时前后对比（基于第一张图片）</h2>
+      <div class="compare-grid">
+        <div id="compareOriginal" class="compare-panel">
+          <div class="compare-tag">原图</div>
+          <div class="preview-empty">请先上传图片</div>
+        </div>
+        <div id="compareProcessed" class="compare-panel">
+          <div class="compare-tag">套用后</div>
+          <div class="preview-empty">点击左上 LUT 列表中的任意项即可预览</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card stack" style="margin-top:16px;">
       <h2>4) 导出设置</h2>
       <label>导出目录（本机路径，不填则自动生成）</label>
       <input id="outputDir" type="text" placeholder="例如: /Users/yourname/Desktop/exports" />
@@ -287,8 +340,32 @@
 
       <label>胶片颗粒强度（0-100，0=关闭）</label>
       <div class="row">
-        <input id="grain" type="range" min="0" max="100" value="0" style="flex:1;" />
-        <input id="grainNum" type="number" min="0" max="100" value="0" style="width:90px;" />
+        <input id="grain" type="range" min="0" max="100" value="50" style="flex:1;" />
+        <input id="grainNum" type="number" min="0" max="100" value="50" style="width:90px;" />
+      </div>
+
+      <label>色散强度（0-100，0=关闭）</label>
+      <div class="row">
+        <input id="dispersion" type="range" min="0" max="100" value="50" style="flex:1;" />
+        <input id="dispersionNum" type="number" min="0" max="100" value="50" style="width:90px;" />
+      </div>
+
+      <label>暗角强度（0-100，0=关闭）</label>
+      <div class="row">
+        <input id="vignette" type="range" min="0" max="100" value="30" style="flex:1;" />
+        <input id="vignetteNum" type="number" min="0" max="100" value="30" style="width:90px;" />
+      </div>
+
+      <label>锐化强度（-100~100，负值降低，0=关闭）</label>
+      <div class="row">
+        <input id="sharpen" type="range" min="-100" max="100" value="0" style="flex:1;" />
+        <input id="sharpenNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
+      </div>
+
+      <label>清晰度强度（-100~100，负值降低，0=关闭）</label>
+      <div class="row">
+        <input id="clarity" type="range" min="-100" max="100" value="0" style="flex:1;" />
+        <input id="clarityNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
       </div>
 
       <div class="row">
@@ -320,9 +397,19 @@
     const favOnlyBtn = document.getElementById('favOnlyBtn');
     const lutListEl = document.getElementById('lutList');
     const lutInfoEl = document.getElementById('lutInfo');
+    const compareOriginalEl = document.getElementById('compareOriginal');
+    const compareProcessedEl = document.getElementById('compareProcessed');
     const outputDirEl = document.getElementById('outputDir');
     const grainEl = document.getElementById('grain');
     const grainNumEl = document.getElementById('grainNum');
+    const dispersionEl = document.getElementById('dispersion');
+    const dispersionNumEl = document.getElementById('dispersionNum');
+    const vignetteEl = document.getElementById('vignette');
+    const vignetteNumEl = document.getElementById('vignetteNum');
+    const sharpenEl = document.getElementById('sharpen');
+    const sharpenNumEl = document.getElementById('sharpenNum');
+    const clarityEl = document.getElementById('clarity');
+    const clarityNumEl = document.getElementById('clarityNum');
     const runBtn = document.getElementById('runBtn');
     const resultEl = document.getElementById('result');
     const logEl = document.getElementById('log');
@@ -332,6 +419,9 @@
     let showFavoritesOnly = false;
     let imagePreviewUrls = [];
     const selectedLutIds = new Set();
+    let activePreviewLutId = null;
+    let previewReqToken = 0;
+    let previewAbortController = null;
 
     function log(msg) {
       const time = new Date().toLocaleTimeString();
@@ -369,6 +459,93 @@
       return showFavoritesOnly ? allLuts.filter(item => item.favorite) : allLuts;
     }
 
+    function getCurrentAdjustments() {
+      return {
+        grainStrength: parseInt(grainNumEl.value || '50', 10),
+        dispersionStrength: parseInt(dispersionNumEl.value || '50', 10),
+        vignetteStrength: parseInt(vignetteNumEl.value || '30', 10),
+        sharpenStrength: parseInt(sharpenNumEl.value || '0', 10),
+        clarityStrength: parseInt(clarityNumEl.value || '0', 10),
+      };
+    }
+
+    function setPreviewMessage(message) {
+      compareProcessedEl.innerHTML = `<div class="compare-tag">套用后</div><div class="preview-empty">${message}</div>`;
+    }
+
+    function setOriginalPreview(url, hasImage) {
+      if (!hasImage) {
+        compareOriginalEl.innerHTML = '<div class="compare-tag">原图</div><div class="preview-empty">请先上传图片</div>';
+        return;
+      }
+      compareOriginalEl.innerHTML = '<div class="compare-tag">原图</div>';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '原图预览';
+      compareOriginalEl.appendChild(img);
+    }
+
+    async function requestLutPreview(lutId) {
+      activePreviewLutId = lutId;
+      renderLutList();
+      const files = Array.from(imagesEl.files || []);
+      if (!files.length) {
+        setPreviewMessage('请先上传图片（将使用第一张图片预览）');
+        return;
+      }
+
+      if (previewAbortController) {
+        previewAbortController.abort();
+      }
+      previewAbortController = new AbortController();
+      const token = ++previewReqToken;
+      setPreviewMessage('正在生成预览...');
+
+      const adj = getCurrentAdjustments();
+      const fd = new FormData();
+      fd.append('image', files[0]);
+      fd.append('lut_id', lutId);
+      fd.append('grain_strength', String(adj.grainStrength));
+      fd.append('dispersion_strength', String(adj.dispersionStrength));
+      fd.append('vignette_strength', String(adj.vignetteStrength));
+      fd.append('sharpen_strength', String(adj.sharpenStrength));
+      fd.append('clarity_strength', String(adj.clarityStrength));
+
+      try {
+        const res = await fetch('/api/preview', {
+          method: 'POST',
+          body: fd,
+          signal: previewAbortController.signal,
+        });
+        const data = await res.json();
+        if (token !== previewReqToken) {
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(data.error || '预览失败');
+        }
+        const img = document.createElement('img');
+        img.src = data.image_data_url;
+        img.alt = 'LUT 预览';
+        compareProcessedEl.innerHTML = '<div class="compare-tag">套用后</div>';
+        compareProcessedEl.appendChild(img);
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          return;
+        }
+        if (token !== previewReqToken) {
+          return;
+        }
+        setPreviewMessage(`预览失败: ${e.message}`);
+      }
+    }
+
+    function refreshActivePreview() {
+      if (activePreviewLutId) {
+        requestLutPreview(activePreviewLutId);
+      }
+    }
+
     function toggleSelectLut(lutId, selected) {
       if (selected) {
         selectedLutIds.add(lutId);
@@ -387,6 +564,7 @@
       imagePreviewEl.innerHTML = '';
       if (!files.length) {
         imagePreviewEl.innerHTML = '<div class="preview-empty">选择图片后会在这里预览</div>';
+        setOriginalPreview('', false);
         return;
       }
 
@@ -401,6 +579,7 @@
         img.alt = files[0].name;
         wrap.appendChild(img);
         imagePreviewEl.appendChild(wrap);
+        setOriginalPreview(urls[0], true);
         return;
       }
 
@@ -422,6 +601,7 @@
       count.textContent = `${files.length} 张`;
       stack.appendChild(count);
       imagePreviewEl.appendChild(stack);
+      setOriginalPreview(urls[0], true);
     }
 
     function renderLutList() {
@@ -436,7 +616,7 @@
       lutListEl.innerHTML = '';
       sortedLuts.forEach(item => {
         const row = document.createElement('div');
-        row.className = `lut-row${selectedLutIds.has(item.id) ? ' is-selected' : ''}`;
+        row.className = `lut-row${selectedLutIds.has(item.id) ? ' is-selected' : ''}${activePreviewLutId === item.id ? ' is-active-preview' : ''}`;
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -479,10 +659,7 @@
         label.textContent = item.label;
 
         row.addEventListener('click', () => {
-          const next = !checkbox.checked;
-          checkbox.checked = next;
-          toggleSelectLut(item.id, next);
-          row.classList.toggle('is-selected', next);
+          requestLutPreview(item.id);
         });
 
         row.appendChild(checkbox);
@@ -514,18 +691,74 @@
       const files = Array.from(imagesEl.files || []);
       imageInfoEl.textContent = files.length ? `已选择 ${files.length} 张图片` : '尚未选择图片';
       renderImagePreview(files);
+      if (!files.length) {
+        activePreviewLutId = null;
+        setPreviewMessage('点击 LUT 后在这里显示预览');
+      } else {
+        refreshActivePreview();
+      }
     });
 
     grainEl.addEventListener('input', () => {
       grainNumEl.value = grainEl.value;
     });
+    grainEl.addEventListener('change', refreshActivePreview);
     grainNumEl.addEventListener('input', () => {
-      let v = parseInt(grainNumEl.value || '0', 10);
-      if (Number.isNaN(v)) v = 0;
+      let v = parseInt(grainNumEl.value || '50', 10);
+      if (Number.isNaN(v)) v = 50;
       v = Math.max(0, Math.min(100, v));
       grainNumEl.value = String(v);
       grainEl.value = String(v);
     });
+    grainNumEl.addEventListener('change', refreshActivePreview);
+    dispersionEl.addEventListener('input', () => {
+      dispersionNumEl.value = dispersionEl.value;
+    });
+    dispersionEl.addEventListener('change', refreshActivePreview);
+    dispersionNumEl.addEventListener('input', () => {
+      let v = parseInt(dispersionNumEl.value || '50', 10);
+      if (Number.isNaN(v)) v = 50;
+      v = Math.max(0, Math.min(100, v));
+      dispersionNumEl.value = String(v);
+      dispersionEl.value = String(v);
+    });
+    dispersionNumEl.addEventListener('change', refreshActivePreview);
+    vignetteEl.addEventListener('input', () => {
+      vignetteNumEl.value = vignetteEl.value;
+    });
+    vignetteEl.addEventListener('change', refreshActivePreview);
+    vignetteNumEl.addEventListener('input', () => {
+      let v = parseInt(vignetteNumEl.value || '30', 10);
+      if (Number.isNaN(v)) v = 30;
+      v = Math.max(0, Math.min(100, v));
+      vignetteNumEl.value = String(v);
+      vignetteEl.value = String(v);
+    });
+    vignetteNumEl.addEventListener('change', refreshActivePreview);
+    sharpenEl.addEventListener('input', () => {
+      sharpenNumEl.value = sharpenEl.value;
+    });
+    sharpenEl.addEventListener('change', refreshActivePreview);
+    sharpenNumEl.addEventListener('input', () => {
+      let v = parseInt(sharpenNumEl.value || '0', 10);
+      if (Number.isNaN(v)) v = 0;
+      v = Math.max(-100, Math.min(100, v));
+      sharpenNumEl.value = String(v);
+      sharpenEl.value = String(v);
+    });
+    sharpenNumEl.addEventListener('change', refreshActivePreview);
+    clarityEl.addEventListener('input', () => {
+      clarityNumEl.value = clarityEl.value;
+    });
+    clarityEl.addEventListener('change', refreshActivePreview);
+    clarityNumEl.addEventListener('input', () => {
+      let v = parseInt(clarityNumEl.value || '0', 10);
+      if (Number.isNaN(v)) v = 0;
+      v = Math.max(-100, Math.min(100, v));
+      clarityNumEl.value = String(v);
+      clarityEl.value = String(v);
+    });
+    clarityNumEl.addEventListener('change', refreshActivePreview);
 
     refreshBtn.addEventListener('click', loadLuts);
 
@@ -547,7 +780,7 @@
         alert('请先选择要删除的 LUT');
         return;
       }
-      if (!confirm(`确认删除选中的 ${selectedIds.length} 个 LUT 吗？（仅会删除自定义 LUT）`)) {
+      if (!confirm(`确认删除选中的 ${selectedIds.length} 个 LUT 吗？`)) {
         return;
       }
 
@@ -562,7 +795,7 @@
           throw new Error(data.error || '删除失败');
         }
         await loadLuts();
-        log(`删除 LUT: 成功 ${data.deleted_count}，内置不可删 ${data.skipped_builtin.length}，其他跳过 ${data.skipped_invalid.length}`);
+        log(`删除 LUT: 成功 ${data.deleted_count}，跳过 ${data.skipped_invalid.length}`);
       } catch (e) {
         log(`删除 LUT 失败: ${e.message}`);
         alert(`删除 LUT 失败: ${e.message}`);
@@ -623,19 +856,29 @@
         return;
       }
 
-      const grainStrength = parseInt(grainNumEl.value || '0', 10);
+      const grainStrength = parseInt(grainNumEl.value || '50', 10);
+      const dispersionStrength = parseInt(dispersionNumEl.value || '50', 10);
+      const vignetteStrength = parseInt(vignetteNumEl.value || '30', 10);
+      const sharpenStrength = parseInt(sharpenNumEl.value || '0', 10);
+      const clarityStrength = parseInt(clarityNumEl.value || '0', 10);
       const outputDir = (outputDirEl.value || '').trim();
 
       const fd = new FormData();
       images.forEach(f => fd.append('images', f));
       fd.append('selected_luts', JSON.stringify(selectedLuts));
       fd.append('grain_strength', String(grainStrength));
+      fd.append('dispersion_strength', String(dispersionStrength));
+      fd.append('vignette_strength', String(vignetteStrength));
+      fd.append('sharpen_strength', String(sharpenStrength));
+      fd.append('clarity_strength', String(clarityStrength));
       fd.append('output_dir', outputDir);
 
       setRunning(true);
       setProgress(0, 0, images.length * selectedLuts.length);
       resultEl.textContent = '处理中，请稍候...';
-      log(`开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, 输出无损 PNG, 颗粒 ${grainStrength}`);
+      log(
+        `开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, 输出无损 PNG, 颗粒 ${grainStrength}, 色散 ${dispersionStrength}, 暗角 ${vignetteStrength}, 锐化 ${sharpenStrength}, 清晰度 ${clarityStrength}`
+      );
 
       try {
         const startRes = await fetch('/api/process/start', { method: 'POST', body: fd });
@@ -663,6 +906,10 @@
               <div>导出目录: <b>${data.output_dir}</b></div>
               <div>输出格式: <b>${(data.output_format || 'png').toUpperCase()}</b>（无损）</div>
               <div>颗粒: <b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
+              <div>色散: <b>${data.dispersion_strength}</b>（ffmpeg chromashift=${data.ffmpeg_chromashift_px}px）</div>
+              <div>暗角: <b>${data.vignette_strength}</b>（ffmpeg vignette angle=${data.ffmpeg_vignette_angle}）</div>
+              <div>锐化: <b>${data.sharpen_strength}</b>（ffmpeg unsharp=${data.ffmpeg_unsharp_amount}）</div>
+              <div>清晰度: <b>${data.clarity_strength}</b>（ffmpeg eq contrast=${data.ffmpeg_clarity_contrast}）</div>
             `;
             log(`处理完成: 成功 ${data.success}，失败 ${data.failed}`);
             if (data.output_dir) {

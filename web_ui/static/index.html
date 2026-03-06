@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LUT 批量套用工具 (Web)</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #d1d5db;
+      --accent: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at 20% 0%, #eef2ff 0%, #f6f7fb 45%, #eef7ff 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 18px;
+      font-size: 28px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.05);
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .stack { display: grid; gap: 10px; }
+    input[type="file"], input[type="text"], input[type="number"], select, button {
+      font-size: 14px;
+    }
+    select {
+      width: 100%;
+      min-height: 260px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: white;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      outline: none;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: #374151;
+    }
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    .muted { color: var(--muted); font-size: 13px; }
+    .full { width: 100%; }
+    .log {
+      width: 100%;
+      min-height: 220px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+    .output {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafafa;
+      font-size: 14px;
+    }
+    .progress-wrap {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #e5e7eb;
+      height: 14px;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2563eb, #0ea5e9);
+      transition: width .2s ease;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>LUT 批量套用工具 (Web 本地版)</h1>
+
+    <div class="grid">
+      <div class="card stack">
+        <h2>1) 上传图片（支持批量）</h2>
+        <input id="images" type="file" accept="image/*" multiple />
+        <div id="imageInfo" class="muted">尚未选择图片</div>
+
+        <h2>2) 导入自定义 LUT（.cube）</h2>
+        <div class="row">
+          <input id="lutFiles" type="file" accept=".cube" multiple class="full" />
+          <button id="importBtn" class="secondary">导入 LUT</button>
+        </div>
+        <div id="importInfo" class="muted">导入后会自动刷新 LUT 列表</div>
+      </div>
+
+      <div class="card stack">
+        <h2>3) 选择 LUT（可多选）</h2>
+        <div class="row">
+          <button id="refreshBtn" class="secondary">刷新 LUT</button>
+          <button id="selectAllBtn" class="secondary">全选</button>
+          <button id="clearSelBtn" class="secondary">清空选择</button>
+        </div>
+        <select id="lutSelect" multiple></select>
+        <div id="lutInfo" class="muted"></div>
+      </div>
+    </div>
+
+    <div class="card stack" style="margin-top:16px;">
+      <h2>4) 导出设置</h2>
+      <label>导出目录（本机路径，不填则自动生成）</label>
+      <input id="outputDir" type="text" placeholder="例如: /Users/yourname/Desktop/exports" />
+
+      <label>JPG 质量（1-100）</label>
+      <div class="row">
+        <input id="quality" type="range" min="1" max="100" value="95" style="flex:1;" />
+        <input id="qualityNum" type="number" min="1" max="100" value="95" style="width:90px;" />
+      </div>
+
+      <label>胶片颗粒强度（0-100，0=关闭）</label>
+      <div class="row">
+        <input id="grain" type="range" min="0" max="100" value="0" style="flex:1;" />
+        <input id="grainNum" type="number" min="0" max="100" value="0" style="width:90px;" />
+      </div>
+
+      <div class="row">
+        <button id="runBtn">5) 开始批量套 LUT</button>
+      </div>
+    </div>
+
+    <div class="card stack" style="margin-top:16px;">
+      <h2>处理结果</h2>
+      <div class="progress-wrap"><div id="progressFill" class="progress-fill"></div></div>
+      <div id="progressText" class="muted">进度: 0%</div>
+      <div id="result" class="output">等待执行...</div>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const imagesEl = document.getElementById('images');
+    const imageInfoEl = document.getElementById('imageInfo');
+    const lutFilesEl = document.getElementById('lutFiles');
+    const importBtn = document.getElementById('importBtn');
+    const importInfoEl = document.getElementById('importInfo');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const clearSelBtn = document.getElementById('clearSelBtn');
+    const lutSelectEl = document.getElementById('lutSelect');
+    const lutInfoEl = document.getElementById('lutInfo');
+    const outputDirEl = document.getElementById('outputDir');
+    const qualityEl = document.getElementById('quality');
+    const qualityNumEl = document.getElementById('qualityNum');
+    const grainEl = document.getElementById('grain');
+    const grainNumEl = document.getElementById('grainNum');
+    const runBtn = document.getElementById('runBtn');
+    const resultEl = document.getElementById('result');
+    const logEl = document.getElementById('log');
+    const progressFillEl = document.getElementById('progressFill');
+    const progressTextEl = document.getElementById('progressText');
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setRunning(running) {
+      runBtn.disabled = running;
+      importBtn.disabled = running;
+      refreshBtn.disabled = running;
+      selectAllBtn.disabled = running;
+      clearSelBtn.disabled = running;
+    }
+
+    function setProgress(percent, done, total) {
+      const p = Math.max(0, Math.min(100, Number(percent) || 0));
+      progressFillEl.style.width = `${p}%`;
+      if (typeof done === 'number' && typeof total === 'number') {
+        progressTextEl.textContent = `进度: ${p.toFixed(1)}% (${done}/${total})`;
+      } else {
+        progressTextEl.textContent = `进度: ${p.toFixed(1)}%`;
+      }
+    }
+
+    function getSelectedLutIds() {
+      return Array.from(lutSelectEl.selectedOptions).map(o => o.value);
+    }
+
+    async function loadLuts() {
+      const res = await fetch('/api/luts');
+      const data = await res.json();
+      lutSelectEl.innerHTML = '';
+      (data.luts || []).forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.label;
+        lutSelectEl.appendChild(opt);
+      });
+      lutInfoEl.textContent = `当前 LUT 数量: ${(data.luts || []).length}`;
+      log(`LUT 列表已刷新，共 ${(data.luts || []).length} 个`);
+    }
+
+    imagesEl.addEventListener('change', () => {
+      const files = Array.from(imagesEl.files || []);
+      imageInfoEl.textContent = files.length ? `已选择 ${files.length} 张图片` : '尚未选择图片';
+    });
+
+    qualityEl.addEventListener('input', () => {
+      qualityNumEl.value = qualityEl.value;
+    });
+    qualityNumEl.addEventListener('input', () => {
+      let v = parseInt(qualityNumEl.value || '95', 10);
+      if (Number.isNaN(v)) v = 95;
+      v = Math.max(1, Math.min(100, v));
+      qualityNumEl.value = String(v);
+      qualityEl.value = String(v);
+    });
+    grainEl.addEventListener('input', () => {
+      grainNumEl.value = grainEl.value;
+    });
+    grainNumEl.addEventListener('input', () => {
+      let v = parseInt(grainNumEl.value || '0', 10);
+      if (Number.isNaN(v)) v = 0;
+      v = Math.max(0, Math.min(100, v));
+      grainNumEl.value = String(v);
+      grainEl.value = String(v);
+    });
+
+    refreshBtn.addEventListener('click', loadLuts);
+
+    selectAllBtn.addEventListener('click', () => {
+      for (const opt of lutSelectEl.options) opt.selected = true;
+      log(`已全选 ${lutSelectEl.options.length} 个 LUT`);
+    });
+
+    clearSelBtn.addEventListener('click', () => {
+      for (const opt of lutSelectEl.options) opt.selected = false;
+      log('已清空 LUT 选择');
+    });
+
+    importBtn.addEventListener('click', async () => {
+      const files = Array.from(lutFilesEl.files || []);
+      if (!files.length) {
+        alert('请先选择 .cube 文件');
+        return;
+      }
+
+      const fd = new FormData();
+      files.forEach(f => fd.append('lut_files', f));
+
+      importBtn.disabled = true;
+      try {
+        const res = await fetch('/api/import-luts', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || '导入失败');
+        }
+        importInfoEl.textContent = `已导入 ${data.count} 个 LUT`;
+        log(`导入 LUT 完成: ${data.count} 个`);
+        await loadLuts();
+      } catch (e) {
+        log(`导入失败: ${e.message}`);
+        alert(`导入失败: ${e.message}`);
+      } finally {
+        importBtn.disabled = false;
+      }
+    });
+
+    runBtn.addEventListener('click', async () => {
+      const images = Array.from(imagesEl.files || []);
+      const selectedLuts = getSelectedLutIds();
+
+      if (!images.length) {
+        alert('请至少上传 1 张图片');
+        return;
+      }
+      if (!selectedLuts.length) {
+        alert('请至少选择 1 个 LUT');
+        return;
+      }
+
+      const quality = parseInt(qualityNumEl.value || '95', 10);
+      const grainStrength = parseInt(grainNumEl.value || '0', 10);
+      const outputDir = (outputDirEl.value || '').trim();
+
+      const fd = new FormData();
+      images.forEach(f => fd.append('images', f));
+      fd.append('selected_luts', JSON.stringify(selectedLuts));
+      fd.append('quality', String(quality));
+      fd.append('grain_strength', String(grainStrength));
+      fd.append('output_dir', outputDir);
+
+      setRunning(true);
+      setProgress(0, 0, images.length * selectedLuts.length);
+      resultEl.textContent = '处理中，请稍候...';
+      log(`开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, JPG 质量 ${quality}, 颗粒 ${grainStrength}`);
+
+      try {
+        const startRes = await fetch('/api/process/start', { method: 'POST', body: fd });
+        const startData = await startRes.json();
+        if (!startRes.ok) {
+          throw new Error(startData.error || '启动处理失败');
+        }
+        const jobId = startData.job_id;
+        log(`任务已创建: ${jobId}`);
+
+        while (true) {
+          const statusRes = await fetch(`/api/process/status/${jobId}`);
+          const status = await statusRes.json();
+          if (!statusRes.ok) {
+            throw new Error(status.error || '获取进度失败');
+          }
+
+          setProgress(status.progress, status.done, status.total);
+
+          if (status.status === 'done') {
+            const data = status.result || {};
+            resultEl.innerHTML = `
+              <div>总任务: <b>${data.total}</b></div>
+              <div>成功: <b>${data.success}</b>，失败: <b>${data.failed}</b></div>
+              <div>导出目录: <b>${data.output_dir}</b></div>
+              <div>质量: <b>${data.quality}</b>（ffmpeg q:v=${data.ffmpeg_qv}）</div>
+              <div>颗粒: <b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
+            `;
+            log(`处理完成: 成功 ${data.success}，失败 ${data.failed}`);
+            if (data.log_tail && data.log_tail.length) {
+              data.log_tail.forEach(item => log(item));
+            }
+            break;
+          }
+
+          if (status.status === 'error') {
+            throw new Error(status.error || '处理失败');
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+      } catch (e) {
+        resultEl.textContent = `处理失败: ${e.message}`;
+        log(`处理失败: ${e.message}`);
+        alert(`处理失败: ${e.message}`);
+      } finally {
+        setRunning(false);
+      }
+    });
+
+    loadLuts().catch(err => {
+      log(`初始化 LUT 失败: ${err.message}`);
+    });
+  </script>
+</body>
+</html>

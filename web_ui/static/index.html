@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LUT 批量套用工具 (Web)</title>
+  <title>LUT 批量套用工具（网页）</title>
   <style>
     :root {
       --bg: #f6f7fb;
@@ -21,9 +21,10 @@
       color: var(--text);
     }
     .wrap {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 20px 24px 28px;
     }
     h1 {
       margin: 0 0 18px;
@@ -120,6 +121,71 @@
       justify-content: center;
       overflow: hidden;
       position: relative;
+    }
+    .preview-zone.has-gallery {
+      display: block;
+      overflow: auto;
+      max-height: 420px;
+    }
+    .gallery-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+      padding: 10px;
+    }
+    .gallery-item {
+      position: relative;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #e5e7eb;
+      cursor: pointer;
+      height: 150px;
+    }
+    .gallery-item:hover {
+      border-color: #93c5fd;
+    }
+    .gallery-item.is-active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+    }
+    .gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .gallery-check-wrap {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      z-index: 2;
+      background: rgba(15, 23, 42, 0.72);
+      border-radius: 999px;
+      padding: 3px 7px;
+      color: #fff;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gallery-check {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      cursor: pointer;
+    }
+    .gallery-index {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      z-index: 2;
+      background: rgba(15, 23, 42, 0.72);
+      color: #fff;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
     }
     .preview-empty {
       color: var(--muted);
@@ -260,6 +326,29 @@
       outline: 1px solid #60a5fa;
       background: #dbeafe;
     }
+    .preview-lut-layout {
+      display: grid;
+      grid-template-columns: 74% 10px 26%;
+      gap: 0;
+      align-items: stretch;
+    }
+    .split-divider {
+      cursor: col-resize;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      user-select: none;
+      touch-action: none;
+    }
+    .split-divider-bar {
+      width: 2px;
+      background: #cbd5e1;
+      border-radius: 999px;
+      margin: 8px 0;
+    }
+    .split-divider:hover .split-divider-bar {
+      background: #94a3b8;
+    }
     .progress-wrap {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -275,6 +364,8 @@
     }
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
+      .preview-lut-layout { grid-template-columns: 1fr; }
+      .split-divider { display: none; }
       .compare-grid { grid-template-columns: 1fr; }
       .compare-panel { min-height: 320px; }
     }
@@ -282,21 +373,42 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>LUT 批量套用工具 (Web 本地版)</h1>
+    <h1>LUT 批量套用工具（本地网页）</h1>
 
-    <div class="grid">
+    <div class="card stack">
+      <h2>1) 上传图片（支持批量）</h2>
+      <input id="images" type="file" accept="image/*" multiple />
+      <div class="tool-row" style="margin-top:8px;">
+        <button id="deleteImagesBtn" class="secondary sm">删除选中图片</button>
+      </div>
+      <div id="imageInfo" class="muted">未选择图片</div>
+      <div id="imagePreview" class="preview-zone"><div class="preview-empty">选择图片后会在这里预览</div></div>
+
+      <h2>2) 导入自定义 LUT（.cube）</h2>
+      <div class="row">
+        <input id="lutFiles" type="file" accept=".cube" multiple class="full" />
+        <button id="importBtn" class="secondary">导入 LUT</button>
+      </div>
+      <div id="importInfo" class="muted">导入后自动刷新 LUT 列表</div>
+    </div>
+
+    <div id="previewLutLayout" class="preview-lut-layout" style="margin-top:16px;">
       <div class="card stack">
-        <h2>1) 上传图片（支持批量）</h2>
-        <input id="images" type="file" accept="image/*" multiple />
-        <div id="imageInfo" class="muted">尚未选择图片</div>
-        <div id="imagePreview" class="preview-zone"><div class="preview-empty">选择图片后会在这里预览</div></div>
-
-        <h2>2) 导入自定义 LUT（.cube）</h2>
-        <div class="row">
-          <input id="lutFiles" type="file" accept=".cube" multiple class="full" />
-          <button id="importBtn" class="secondary">导入 LUT</button>
+        <h2>实时前后对比预览（基于当前选中图片）</h2>
+        <div class="compare-grid">
+          <div id="compareOriginal" class="compare-panel">
+            <div class="compare-tag">原图</div>
+            <div class="preview-empty">请先上传图片</div>
+          </div>
+          <div id="compareProcessed" class="compare-panel">
+            <div class="compare-tag">套用后</div>
+            <div class="preview-empty">点击右侧 LUT 即可预览</div>
+          </div>
         </div>
-        <div id="importInfo" class="muted">导入后会自动刷新 LUT 列表</div>
+      </div>
+
+      <div id="previewLutDivider" class="split-divider" aria-label="resize preview and lut panels">
+        <div class="split-divider-bar"></div>
       </div>
 
       <div class="card stack">
@@ -309,7 +421,7 @@
         </div>
         <div class="tool-row">
           <button id="pickFavBtn" class="secondary sm">选择收藏</button>
-          <button id="favOnlyBtn" class="secondary sm">只看收藏: 关</button>
+          <button id="favOnlyBtn" class="secondary sm">只看收藏：关</button>
         </div>
         <div id="lutList" class="lut-list"></div>
         <div id="lutInfo" class="muted"></div>
@@ -317,52 +429,45 @@
     </div>
 
     <div class="card stack" style="margin-top:16px;">
-      <h2>即时前后对比（基于第一张图片）</h2>
-      <div class="compare-grid">
-        <div id="compareOriginal" class="compare-panel">
-          <div class="compare-tag">原图</div>
-          <div class="preview-empty">请先上传图片</div>
-        </div>
-        <div id="compareProcessed" class="compare-panel">
-          <div class="compare-tag">套用后</div>
-          <div class="preview-empty">点击左上 LUT 列表中的任意项即可预览</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card stack" style="margin-top:16px;">
       <h2>4) 导出设置</h2>
       <label>导出目录（本机路径，不填则自动生成）</label>
-      <input id="outputDir" type="text" placeholder="例如: /Users/yourname/Desktop/exports" />
+      <input id="outputDir" type="text" placeholder="例如：C:/Users/yourname/Desktop/exports" />
 
       <label>输出格式</label>
-      <div class="muted">固定为无损 PNG（`compression_level=0`）</div>
+      <div class="muted">固定为高画质 JPG（体积更小，画质更好）</div>
 
-      <label>胶片颗粒强度（0-100，0=关闭）</label>
+      <label>预览 / 导出最长边</label>
+      <select id="maxDim">
+        <option value="720">720 px</option>
+        <option value="1440" selected>1440 px</option>
+        <option value="3840">4K px</option>
+      </select>
+
+      <label>胶片颗粒强度（0-100，0 为关闭）</label>
       <div class="row">
         <input id="grain" type="range" min="0" max="100" value="50" style="flex:1;" />
         <input id="grainNum" type="number" min="0" max="100" value="50" style="width:90px;" />
       </div>
 
-      <label>色散强度（0-100，0=关闭）</label>
+      <label>色散强度（0-100，0 为关闭）</label>
       <div class="row">
         <input id="dispersion" type="range" min="0" max="100" value="50" style="flex:1;" />
         <input id="dispersionNum" type="number" min="0" max="100" value="50" style="width:90px;" />
       </div>
 
-      <label>暗角强度（0-100，0=关闭）</label>
+      <label>暗角强度（0-100，0 为关闭）</label>
       <div class="row">
         <input id="vignette" type="range" min="0" max="100" value="30" style="flex:1;" />
         <input id="vignetteNum" type="number" min="0" max="100" value="30" style="width:90px;" />
       </div>
 
-      <label>锐化强度（-100~100，负值降低，0=关闭）</label>
+      <label>锐化强度（-100 到 100，0 为关闭）</label>
       <div class="row">
         <input id="sharpen" type="range" min="-100" max="100" value="0" style="flex:1;" />
         <input id="sharpenNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
       </div>
 
-      <label>清晰度强度（-100~100，负值降低，0=关闭）</label>
+      <label>清晰度强度（-100 到 100，0 为关闭）</label>
       <div class="row">
         <input id="clarity" type="range" min="-100" max="100" value="0" style="flex:1;" />
         <input id="clarityNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
@@ -376,7 +481,7 @@
     <div class="card stack" style="margin-top:16px;">
       <h2>处理结果</h2>
       <div class="progress-wrap"><div id="progressFill" class="progress-fill"></div></div>
-      <div id="progressText" class="muted">进度: 0%</div>
+      <div id="progressText" class="muted">进度：0%</div>
       <div id="result" class="output">等待执行...</div>
       <div id="log" class="log"></div>
     </div>
@@ -384,6 +489,7 @@
 
   <script>
     const imagesEl = document.getElementById('images');
+    const deleteImagesBtn = document.getElementById('deleteImagesBtn');
     const imageInfoEl = document.getElementById('imageInfo');
     const imagePreviewEl = document.getElementById('imagePreview');
     const lutFilesEl = document.getElementById('lutFiles');
@@ -400,6 +506,7 @@
     const compareOriginalEl = document.getElementById('compareOriginal');
     const compareProcessedEl = document.getElementById('compareProcessed');
     const outputDirEl = document.getElementById('outputDir');
+    const maxDimEl = document.getElementById('maxDim');
     const grainEl = document.getElementById('grain');
     const grainNumEl = document.getElementById('grainNum');
     const dispersionEl = document.getElementById('dispersion');
@@ -415,9 +522,18 @@
     const logEl = document.getElementById('log');
     const progressFillEl = document.getElementById('progressFill');
     const progressTextEl = document.getElementById('progressText');
+    const previewLutLayoutEl = document.getElementById('previewLutLayout');
+    const previewLutDividerEl = document.getElementById('previewLutDivider');
     let allLuts = [];
     let showFavoritesOnly = false;
+    let selectedImageFiles = [];
+    let activeImageIndex = 0;
+    const selectedImageIndexes = new Set();
+    let galleryItemNodes = [];
+    let galleryCurrentUrls = [];
     let imagePreviewUrls = [];
+    let previewImageBlob = null;
+    let previewImageBlobMaxDim = null;
     const selectedLutIds = new Set();
     let activePreviewLutId = null;
     let previewReqToken = 0;
@@ -432,6 +548,7 @@
     function setRunning(running) {
       runBtn.disabled = running;
       importBtn.disabled = running;
+      deleteImagesBtn.disabled = running || selectedImageFiles.length === 0 || selectedImageIndexes.size === 0;
       refreshBtn.disabled = running;
       selectAllBtn.disabled = running;
       clearSelBtn.disabled = running;
@@ -444,9 +561,9 @@
       const p = Math.max(0, Math.min(100, Number(percent) || 0));
       progressFillEl.style.width = `${p}%`;
       if (typeof done === 'number' && typeof total === 'number') {
-        progressTextEl.textContent = `进度: ${p.toFixed(1)}% (${done}/${total})`;
+        progressTextEl.textContent = `\u8fdb\u5ea6\uff1a${p.toFixed(1)}% (${done}/${total})`;
       } else {
-        progressTextEl.textContent = `进度: ${p.toFixed(1)}%`;
+        progressTextEl.textContent = `\u8fdb\u5ea6\uff1a${p.toFixed(1)}%`;
       }
     }
 
@@ -461,6 +578,7 @@
 
     function getCurrentAdjustments() {
       return {
+        maxDim: parseInt(maxDimEl.value || '1440', 10),
         grainStrength: parseInt(grainNumEl.value || '50', 10),
         dispersionStrength: parseInt(dispersionNumEl.value || '50', 10),
         vignetteStrength: parseInt(vignetteNumEl.value || '30', 10),
@@ -470,28 +588,107 @@
     }
 
     function setPreviewMessage(message) {
-      compareProcessedEl.innerHTML = `<div class="compare-tag">套用后</div><div class="preview-empty">${message}</div>`;
+      compareProcessedEl.innerHTML = `<div class="compare-tag">\u5957\u7528\u540e</div><div class="preview-empty">${message}</div>`;
     }
 
     function setOriginalPreview(url, hasImage) {
       if (!hasImage) {
-        compareOriginalEl.innerHTML = '<div class="compare-tag">原图</div><div class="preview-empty">请先上传图片</div>';
+        compareOriginalEl.innerHTML = '<div class="compare-tag">\u539f\u56fe</div><div class="preview-empty">\u8bf7\u5148\u4e0a\u4f20\u56fe\u7247</div>';
         return;
       }
-      compareOriginalEl.innerHTML = '<div class="compare-tag">原图</div>';
+      compareOriginalEl.innerHTML = '<div class="compare-tag">\u539f\u56fe</div>';
       const img = document.createElement('img');
       img.src = url;
-      img.alt = '原图预览';
+      img.alt = '\u539f\u56fe\u9884\u89c8';
       compareOriginalEl.appendChild(img);
+    }
+
+    function getCurrentImages() {
+      return selectedImageFiles;
+    }
+
+    function syncImagesInputFromState() {
+      try {
+        const dt = new DataTransfer();
+        selectedImageFiles.forEach((file) => dt.items.add(file));
+        imagesEl.files = dt.files;
+      } catch (e) {
+      }
+    }
+
+    function normalizeImageState() {
+      if (activeImageIndex >= selectedImageFiles.length) {
+        activeImageIndex = Math.max(0, selectedImageFiles.length - 1);
+      }
+      if (activeImageIndex < 0) {
+        activeImageIndex = 0;
+      }
+      for (const idx of Array.from(selectedImageIndexes)) {
+        if (idx < 0 || idx >= selectedImageFiles.length) {
+          selectedImageIndexes.delete(idx);
+        }
+      }
+    }
+
+    function updateImageInfo() {
+      const total = selectedImageFiles.length;
+      const checked = selectedImageIndexes.size;
+      deleteImagesBtn.disabled = total === 0 || checked === 0;
+      if (!total) {
+        imageInfoEl.textContent = '\u672a\u9009\u62e9\u56fe\u7247';
+        return;
+      }
+      imageInfoEl.textContent = `\u5df2\u9009\u62e9 ${total} \u5f20\u56fe\u7247\uff0c\u5df2\u52fe\u9009 ${checked} \u5f20`;
+    }
+
+    function initPreviewLutResize() {
+      if (!previewLutLayoutEl || !previewLutDividerEl) return;
+      let dragging = false;
+
+      const updateByClientX = (clientX) => {
+        const rect = previewLutLayoutEl.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const rawPct = ((clientX - rect.left) / rect.width) * 100;
+        const leftPct = Math.max(58, Math.min(88, rawPct));
+        const rightPct = 100 - leftPct;
+        previewLutLayoutEl.style.gridTemplateColumns = `${leftPct}% 10px ${rightPct}%`;
+      };
+
+      const onPointerMove = (e) => {
+        if (!dragging) return;
+        updateByClientX(e.clientX);
+      };
+
+      const onPointerUp = () => {
+        dragging = false;
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+      };
+
+      previewLutDividerEl.addEventListener('pointerdown', (e) => {
+        if (window.matchMedia('(max-width: 900px)').matches) return;
+        dragging = true;
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        e.preventDefault();
+      });
     }
 
     async function requestLutPreview(lutId) {
       activePreviewLutId = lutId;
       renderLutList();
-      const files = Array.from(imagesEl.files || []);
+      const files = getCurrentImages();
       if (!files.length) {
-        setPreviewMessage('请先上传图片（将使用第一张图片预览）');
+        setPreviewMessage('\u8bf7\u5148\u4e0a\u4f20\u56fe\u7247');
         return;
+      }
+      const activeFile = files[Math.min(activeImageIndex, files.length - 1)];
+
+      const selectedMaxDim = parseInt(maxDimEl.value || '1440', 10);
+      if (!previewImageBlob || previewImageBlobMaxDim !== selectedMaxDim) {
+        setPreviewMessage('\u6b63\u5728\u51c6\u5907\u9884\u89c8...');
+        previewImageBlob = await buildPreviewBlob(activeFile, selectedMaxDim);
+        previewImageBlobMaxDim = selectedMaxDim;
       }
 
       if (previewAbortController) {
@@ -499,12 +696,13 @@
       }
       previewAbortController = new AbortController();
       const token = ++previewReqToken;
-      setPreviewMessage('正在生成预览...');
+      setPreviewMessage('\u6b63\u5728\u751f\u6210\u9884\u89c8...');
 
       const adj = getCurrentAdjustments();
       const fd = new FormData();
-      fd.append('image', files[0]);
+      fd.append('image', previewImageBlob, 'preview.jpg');
       fd.append('lut_id', lutId);
+      fd.append('max_dim', String(selectedMaxDim));
       fd.append('grain_strength', String(adj.grainStrength));
       fd.append('dispersion_strength', String(adj.dispersionStrength));
       fd.append('vignette_strength', String(adj.vignetteStrength));
@@ -522,12 +720,12 @@
           return;
         }
         if (!res.ok) {
-          throw new Error(data.error || '预览失败');
+          throw new Error(data.error || '\u9884\u89c8\u5931\u8d25');
         }
         const img = document.createElement('img');
         img.src = data.image_data_url;
-        img.alt = 'LUT 预览';
-        compareProcessedEl.innerHTML = '<div class="compare-tag">套用后</div>';
+        img.alt = 'LUT \u9884\u89c8';
+        compareProcessedEl.innerHTML = '<div class="compare-tag">\u5957\u7528\u540e</div>';
         compareProcessedEl.appendChild(img);
       } catch (e) {
         if (e.name === 'AbortError') {
@@ -536,7 +734,7 @@
         if (token !== previewReqToken) {
           return;
         }
-        setPreviewMessage(`预览失败: ${e.message}`);
+        setPreviewMessage(`\u9884\u89c8\u5931\u8d25\uff1a${e.message}`);
       }
     }
 
@@ -557,51 +755,140 @@
     function clearPreviewUrls() {
       imagePreviewUrls.forEach(url => URL.revokeObjectURL(url));
       imagePreviewUrls = [];
+      galleryCurrentUrls = [];
+      galleryItemNodes = [];
+    }
+
+    function updateGalleryActiveState() {
+      galleryItemNodes.forEach((node, idx) => {
+        node.classList.toggle('is-active', idx === activeImageIndex);
+      });
+    }
+
+    async function buildPreviewBlob(file, maxDim) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('\u8bfb\u53d6\u56fe\u7247\u5931\u8d25'));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error('\u89e3\u7801\u56fe\u7247\u5931\u8d25'));
+          img.onload = () => {
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d', { alpha: false });
+            if (!ctx) {
+              reject(new Error('Canvas \u4e0d\u53ef\u7528'));
+              return;
+            }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error('\u751f\u6210\u9884\u89c8\u56fe\u5931\u8d25'));
+                  return;
+                }
+                resolve(blob);
+              },
+              'image/jpeg',
+              0.9
+            );
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
     function renderImagePreview(files) {
+      normalizeImageState();
       clearPreviewUrls();
+      previewImageBlob = null;
+      previewImageBlobMaxDim = null;
       imagePreviewEl.innerHTML = '';
+      imagePreviewEl.classList.remove('has-gallery');
       if (!files.length) {
-        imagePreviewEl.innerHTML = '<div class="preview-empty">选择图片后会在这里预览</div>';
+        imagePreviewEl.innerHTML = '<div class="preview-empty">\u9009\u62e9\u56fe\u7247\u540e\u4f1a\u5728\u8fd9\u91cc\u9884\u89c8</div>';
         setOriginalPreview('', false);
+        updateImageInfo();
         return;
       }
 
       const urls = files.map(file => URL.createObjectURL(file));
       imagePreviewUrls = urls;
+      galleryCurrentUrls = urls;
 
-      if (files.length === 1) {
-        const wrap = document.createElement('div');
-        wrap.className = 'preview-single';
-        const img = document.createElement('img');
-        img.src = urls[0];
-        img.alt = files[0].name;
-        wrap.appendChild(img);
-        imagePreviewEl.appendChild(wrap);
-        setOriginalPreview(urls[0], true);
-        return;
-      }
+      const gallery = document.createElement('div');
+      gallery.className = 'gallery-grid';
+      imagePreviewEl.classList.add('has-gallery');
+      galleryItemNodes = [];
+      imagePreviewEl.appendChild(gallery);
+      setOriginalPreview(urls[Math.min(activeImageIndex, urls.length - 1)], true);
+      updateImageInfo();
 
-      const stack = document.createElement('div');
-      stack.className = 'preview-stack';
-      const limit = Math.min(4, urls.length);
-      for (let i = 0; i < limit; i += 1) {
-        const card = document.createElement('div');
-        card.className = 'stack-card';
-        card.style.backgroundImage = `url("${urls[i]}")`;
-        card.style.left = `${18 + i * 16}px`;
-        card.style.top = `${18 + i * 8}px`;
-        card.style.transform = `rotate(${(i - 1.5) * 3}deg)`;
-        card.style.zIndex = String(i + 1);
-        stack.appendChild(card);
-      }
-      const count = document.createElement('div');
-      count.className = 'stack-count';
-      count.textContent = `${files.length} 张`;
-      stack.appendChild(count);
-      imagePreviewEl.appendChild(stack);
-      setOriginalPreview(urls[0], true);
+      let renderIdx = 0;
+      const batchSize = 24;
+      const renderBatch = () => {
+        const end = Math.min(files.length, renderIdx + batchSize);
+        for (; renderIdx < end; renderIdx += 1) {
+          const idx = renderIdx;
+          const file = files[idx];
+          const item = document.createElement('div');
+          item.className = `gallery-item${idx === activeImageIndex ? ' is-active' : ''}`;
+
+          const img = document.createElement('img');
+          img.loading = idx < 24 ? 'eager' : 'lazy';
+          img.decoding = 'async';
+          img.src = urls[idx];
+          img.alt = file.name || `image-${idx + 1}`;
+          item.appendChild(img);
+
+          const checkWrap = document.createElement('label');
+          checkWrap.className = 'gallery-check-wrap';
+          checkWrap.addEventListener('click', (event) => event.stopPropagation());
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'gallery-check';
+          checkbox.checked = selectedImageIndexes.has(idx);
+          checkbox.addEventListener('click', (event) => event.stopPropagation());
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+              selectedImageIndexes.add(idx);
+            } else {
+              selectedImageIndexes.delete(idx);
+            }
+            updateImageInfo();
+          });
+          const checkText = document.createElement('span');
+          checkText.textContent = '\u9009\u4e2d';
+          checkWrap.appendChild(checkbox);
+          checkWrap.appendChild(checkText);
+          item.appendChild(checkWrap);
+
+          const indexTag = document.createElement('div');
+          indexTag.className = 'gallery-index';
+          indexTag.textContent = `${idx + 1}/${files.length}`;
+          item.appendChild(indexTag);
+
+          item.addEventListener('click', () => {
+            activeImageIndex = idx;
+            previewImageBlob = null;
+            previewImageBlobMaxDim = null;
+            updateGalleryActiveState();
+            setOriginalPreview(galleryCurrentUrls[idx], true);
+            refreshActivePreview();
+          });
+
+          galleryItemNodes.push(item);
+          gallery.appendChild(item);
+        }
+
+        if (renderIdx < files.length) {
+          window.requestAnimationFrame(renderBatch);
+        }
+      };
+      window.requestAnimationFrame(renderBatch);
     }
 
     function renderLutList() {
@@ -633,8 +920,8 @@
         const starBtn = document.createElement('button');
         starBtn.type = 'button';
         starBtn.className = `lut-star${item.favorite ? ' is-fav' : ''}`;
-        starBtn.textContent = item.favorite ? '★' : '☆';
-        starBtn.title = item.favorite ? '取消收藏' : '收藏';
+        starBtn.textContent = item.favorite ? '*' : 'o';
+        starBtn.title = item.favorite ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf';
         starBtn.addEventListener('click', async (event) => {
           event.stopPropagation();
           try {
@@ -645,12 +932,12 @@
             });
             const data = await res.json();
             if (!res.ok) {
-              throw new Error(data.error || '更新收藏失败');
+              throw new Error(data.error || '\u6536\u85cf\u72b6\u6001\u66f4\u65b0\u5931\u8d25');
             }
             await loadLuts();
           } catch (e) {
-            log(`更新收藏失败: ${e.message}`);
-            alert(`更新收藏失败: ${e.message}`);
+            log(`\u6536\u85cf\u72b6\u6001\u66f4\u65b0\u5931\u8d25\uff1a${e.message}`);
+            alert(`\u6536\u85cf\u72b6\u6001\u66f4\u65b0\u5931\u8d25\uff1a${e.message}`);
           }
         });
 
@@ -669,8 +956,8 @@
       });
 
       const favCount = allLuts.filter(item => item.favorite).length;
-      lutInfoEl.textContent = `当前 LUT 数量: ${allLuts.length}，收藏: ${favCount}${showFavoritesOnly ? '（仅显示收藏）' : ''}`;
-      favOnlyBtn.textContent = `只看收藏: ${showFavoritesOnly ? '开' : '关'}`;
+      lutInfoEl.textContent = `\u5f53\u524d LUT \u6570\u91cf\uff1a${allLuts.length}\uff0c\u6536\u85cf\uff1a${favCount}${showFavoritesOnly ? '\uff08\u4ec5\u663e\u793a\u6536\u85cf\uff09' : ''}`;
+      favOnlyBtn.textContent = `\u53ea\u770b\u6536\u85cf\uff1a${showFavoritesOnly ? '\u5f00' : '\u5173'}`;
     }
 
     async function loadLuts() {
@@ -684,19 +971,51 @@
         }
       }
       renderLutList();
-      log(`LUT 列表已刷新，共 ${allLuts.length} 个，收藏 ${allLuts.filter(item => item.favorite).length} 个`);
+      log(`LUT \u5217\u8868\u5df2\u5237\u65b0\uff1a\u603b\u6570 ${allLuts.length}\uff0c\u6536\u85cf ${allLuts.filter(item => item.favorite).length}`);
     }
 
     imagesEl.addEventListener('change', () => {
-      const files = Array.from(imagesEl.files || []);
-      imageInfoEl.textContent = files.length ? `已选择 ${files.length} 张图片` : '尚未选择图片';
-      renderImagePreview(files);
-      if (!files.length) {
+      selectedImageFiles = Array.from(imagesEl.files || []);
+      activeImageIndex = 0;
+      selectedImageIndexes.clear();
+      renderImagePreview(selectedImageFiles);
+      syncImagesInputFromState();
+      if (!selectedImageFiles.length) {
         activePreviewLutId = null;
-        setPreviewMessage('点击 LUT 后在这里显示预览');
+        setPreviewMessage('\u70b9\u51fb\u53f3\u4fa7 LUT \u5373\u53ef\u9884\u89c8');
       } else {
         refreshActivePreview();
       }
+    });
+
+    deleteImagesBtn.addEventListener('click', () => {
+      if (!selectedImageFiles.length) {
+        alert('\u5f53\u524d\u6ca1\u6709\u53ef\u5220\u9664\u7684\u56fe\u7247');
+        return;
+      }
+      if (!selectedImageIndexes.size) {
+        alert('\u8bf7\u5148\u52fe\u9009\u8981\u5220\u9664\u7684\u56fe\u7247');
+        return;
+      }
+      const next = selectedImageFiles.filter((_, idx) => !selectedImageIndexes.has(idx));
+      selectedImageFiles = next;
+      selectedImageIndexes.clear();
+      normalizeImageState();
+      syncImagesInputFromState();
+      renderImagePreview(selectedImageFiles);
+      if (!selectedImageFiles.length) {
+        activePreviewLutId = null;
+        setPreviewMessage('\u70b9\u51fb\u53f3\u4fa7 LUT \u5373\u53ef\u9884\u89c8');
+      } else {
+        refreshActivePreview();
+      }
+      log(`\u5df2\u4ece\u753b\u5eca\u4e2d\u5220\u9664\u56fe\u7247\uff0c\u5269\u4f59 ${selectedImageFiles.length} \u5f20`);
+    });
+
+    maxDimEl.addEventListener('change', () => {
+      previewImageBlob = null;
+      previewImageBlobMaxDim = null;
+      refreshActivePreview();
     });
 
     grainEl.addEventListener('input', () => {
@@ -765,22 +1084,22 @@
     selectAllBtn.addEventListener('click', () => {
       getVisibleLuts().forEach(item => selectedLutIds.add(item.id));
       renderLutList();
-      log(`已全选 ${getVisibleLuts().length} 个 LUT`);
+      log(`\u5df2\u5168\u9009\u53ef\u89c1 LUT\uff1a${getVisibleLuts().length}`);
     });
 
     clearSelBtn.addEventListener('click', () => {
       selectedLutIds.clear();
       renderLutList();
-      log('已清空 LUT 选择');
+      log('\u5df2\u6e05\u7a7a LUT \u9009\u62e9');
     });
 
     deleteSelBtn.addEventListener('click', async () => {
       const selectedIds = getSelectedLutIds();
       if (!selectedIds.length) {
-        alert('请先选择要删除的 LUT');
+        alert('\u8bf7\u5148\u9009\u62e9\u8981\u5220\u9664\u7684 LUT');
         return;
       }
-      if (!confirm(`确认删除选中的 ${selectedIds.length} 个 LUT 吗？`)) {
+      if (!confirm(`\u786e\u8ba4\u5220\u9664\u9009\u4e2d\u7684 ${selectedIds.length} \u4e2a LUT \u5417\uff1f`)) {
         return;
       }
 
@@ -792,13 +1111,13 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || '删除失败');
+          throw new Error(data.error || '\u5220\u9664\u5931\u8d25');
         }
         await loadLuts();
-        log(`删除 LUT: 成功 ${data.deleted_count}，跳过 ${data.skipped_invalid.length}`);
+        log(`\u5220\u9664 LUT \u5b8c\u6210\uff1a\u6210\u529f ${data.deleted_count}\uff0c\u8df3\u8fc7 ${data.skipped_invalid.length}`);
       } catch (e) {
-        log(`删除 LUT 失败: ${e.message}`);
-        alert(`删除 LUT 失败: ${e.message}`);
+        log(`\u5220\u9664 LUT \u5931\u8d25\uff1a${e.message}`);
+        alert(`\u5220\u9664 LUT \u5931\u8d25\uff1a${e.message}`);
       }
     });
 
@@ -807,7 +1126,7 @@
       allLuts.filter(item => item.favorite).forEach(item => selectedLutIds.add(item.id));
       renderLutList();
       const favoriteIds = allLuts.filter(item => item.favorite);
-      log(`已选择收藏 LUT，共 ${favoriteIds.length} 个`);
+      log(`\u5df2\u9009\u62e9\u6536\u85cf LUT\uff1a${favoriteIds.length}`);
     });
 
     favOnlyBtn.addEventListener('click', () => {
@@ -818,7 +1137,7 @@
     importBtn.addEventListener('click', async () => {
       const files = Array.from(lutFilesEl.files || []);
       if (!files.length) {
-        alert('请先选择 .cube 文件');
+        alert('\u8bf7\u5148\u9009\u62e9 .cube \u6587\u4ef6');
         return;
       }
 
@@ -830,29 +1149,29 @@
         const res = await fetch('/api/import-luts', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || '导入失败');
+          throw new Error(data.error || '\u5bfc\u5165\u5931\u8d25');
         }
-        importInfoEl.textContent = `已导入 ${data.count} 个 LUT`;
-        log(`导入 LUT 完成: ${data.count} 个`);
+        importInfoEl.textContent = `\u5df2\u5bfc\u5165 ${data.count} \u4e2a LUT`;
+        log(`\u5bfc\u5165\u5b8c\u6210\uff1a${data.count} \u4e2a LUT`);
         await loadLuts();
       } catch (e) {
-        log(`导入失败: ${e.message}`);
-        alert(`导入失败: ${e.message}`);
+        log(`\u5bfc\u5165\u5931\u8d25\uff1a${e.message}`);
+        alert(`\u5bfc\u5165\u5931\u8d25\uff1a${e.message}`);
       } finally {
         importBtn.disabled = false;
       }
     });
 
     runBtn.addEventListener('click', async () => {
-      const images = Array.from(imagesEl.files || []);
+      const images = getCurrentImages();
       const selectedLuts = getSelectedLutIds();
 
       if (!images.length) {
-        alert('请至少上传 1 张图片');
+        alert('\u8bf7\u81f3\u5c11\u4e0a\u4f20 1 \u5f20\u56fe\u7247');
         return;
       }
       if (!selectedLuts.length) {
-        alert('请至少选择 1 个 LUT');
+        alert('\u8bf7\u81f3\u5c11\u9009\u62e9 1 \u4e2a LUT');
         return;
       }
 
@@ -872,28 +1191,29 @@
       fd.append('sharpen_strength', String(sharpenStrength));
       fd.append('clarity_strength', String(clarityStrength));
       fd.append('output_dir', outputDir);
+      fd.append('max_dim', String(parseInt(maxDimEl.value || '1440', 10)));
 
       setRunning(true);
       setProgress(0, 0, images.length * selectedLuts.length);
-      resultEl.textContent = '处理中，请稍候...';
+      resultEl.textContent = '\u6b63\u5728\u5904\u7406\uff0c\u8bf7\u7a0d\u5019...';
       log(
-        `开始处理: 图片 ${images.length} 张 x LUT ${selectedLuts.length} 个, 输出无损 PNG, 颗粒 ${grainStrength}, 色散 ${dispersionStrength}, 暗角 ${vignetteStrength}, 锐化 ${sharpenStrength}, 清晰度 ${clarityStrength}`
+          `\u5f00\u59cb\u6279\u91cf\u5904\u7406\uff1a\u56fe\u7247 ${images.length} \u5f20 x LUT ${selectedLuts.length} \u4e2a\uff0c\u8f93\u51fa JPG\uff0c\u6700\u957f\u8fb9 ${parseInt(maxDimEl.value || '1440', 10)}px\uff0c\u9897\u7c92 ${grainStrength}\uff0c\u8272\u6563 ${dispersionStrength}\uff0c\u6697\u89d2 ${vignetteStrength}\uff0c\u9510\u5316 ${sharpenStrength}\uff0c\u6e05\u6670\u5ea6 ${clarityStrength}`
       );
 
       try {
         const startRes = await fetch('/api/process/start', { method: 'POST', body: fd });
         const startData = await startRes.json();
         if (!startRes.ok) {
-          throw new Error(startData.error || '启动处理失败');
+          throw new Error(startData.error || '\u542f\u52a8\u5904\u7406\u5931\u8d25');
         }
         const jobId = startData.job_id;
-        log(`任务已创建: ${jobId}`);
+        log(`\u4efb\u52a1\u5df2\u521b\u5efa\uff1a${jobId}`);
 
         while (true) {
           const statusRes = await fetch(`/api/process/status/${jobId}`);
           const status = await statusRes.json();
           if (!statusRes.ok) {
-            throw new Error(status.error || '获取进度失败');
+            throw new Error(status.error || '\u83b7\u53d6\u8fdb\u5ea6\u5931\u8d25');
           }
 
           setProgress(status.progress, status.done, status.total);
@@ -901,17 +1221,18 @@
           if (status.status === 'done') {
             const data = status.result || {};
             resultEl.innerHTML = `
-              <div>总任务: <b>${data.total}</b></div>
-              <div>成功: <b>${data.success}</b>，失败: <b>${data.failed}</b></div>
-              <div>导出目录: <b>${data.output_dir}</b></div>
-              <div>输出格式: <b>${(data.output_format || 'png').toUpperCase()}</b>（无损）</div>
-              <div>颗粒: <b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
-              <div>色散: <b>${data.dispersion_strength}</b>（ffmpeg chromashift=${data.ffmpeg_chromashift_px}px）</div>
-              <div>暗角: <b>${data.vignette_strength}</b>（ffmpeg vignette angle=${data.ffmpeg_vignette_angle}）</div>
-              <div>锐化: <b>${data.sharpen_strength}</b>（ffmpeg unsharp=${data.ffmpeg_unsharp_amount}）</div>
-              <div>清晰度: <b>${data.clarity_strength}</b>（ffmpeg eq contrast=${data.ffmpeg_clarity_contrast}）</div>
+              <div>总任务：<b>${data.total}</b></div>
+              <div>成功：<b>${data.success}</b>，失败：<b>${data.failed}</b></div>
+              <div>导出目录：<b>${data.output_dir}</b></div>
+              <div>输出格式：<b>${(data.output_format || 'jpg').toUpperCase()}</b>（高画质）</div>
+              <div>最长边：<b>${data.max_dim || parseInt(maxDimEl.value || '1440', 10)}px</b></div>
+              <div>颗粒：<b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
+              <div>色散：<b>${data.dispersion_strength}</b>（ffmpeg chromashift=${data.ffmpeg_chromashift_px}px）</div>
+              <div>暗角：<b>${data.vignette_strength}</b>（ffmpeg vignette angle=${data.ffmpeg_vignette_angle}）</div>
+              <div>锐化：<b>${data.sharpen_strength}</b>（ffmpeg unsharp=${data.ffmpeg_unsharp_amount}）</div>
+              <div>清晰度：<b>${data.clarity_strength}</b>（ffmpeg eq contrast=${data.ffmpeg_clarity_contrast}）</div>
             `;
-            log(`处理完成: 成功 ${data.success}，失败 ${data.failed}`);
+            log(`处理完成：成功 ${data.success}，失败 ${data.failed}`);
             if (data.output_dir) {
               try {
                 const openRes = await fetch('/api/open-output', {
@@ -921,12 +1242,12 @@
                 });
                 const openData = await openRes.json();
                 if (!openRes.ok) {
-                  log(`自动打开导出目录失败: ${openData.error || '未知错误'}`);
+                  log(`自动打开导出目录失败：${openData.error || '未知错误'}`);
                 } else {
-                  log(`已打开导出目录: ${data.output_dir}`);
+                  log(`已打开导出目录：${data.output_dir}`);
                 }
               } catch (openErr) {
-                log(`自动打开导出目录失败: ${openErr.message}`);
+                log(`自动打开导出目录失败：${openErr.message}`);
               }
             }
             if (data.log_tail && data.log_tail.length) {
@@ -942,17 +1263,21 @@
           await new Promise(resolve => setTimeout(resolve, 400));
         }
       } catch (e) {
-        resultEl.textContent = `处理失败: ${e.message}`;
-        log(`处理失败: ${e.message}`);
-        alert(`处理失败: ${e.message}`);
+        resultEl.textContent = `处理失败：${e.message}`;
+        log(`处理失败：${e.message}`);
+        alert(`处理失败：${e.message}`);
       } finally {
         setRunning(false);
       }
     });
 
+    updateImageInfo();
+    initPreviewLutResize();
     loadLuts().catch(err => {
-      log(`初始化 LUT 失败: ${err.message}`);
+      log(`初始化 LUT 列表失败：${err.message}`);
     });
   </script>
 </body>
 </html>
+
+

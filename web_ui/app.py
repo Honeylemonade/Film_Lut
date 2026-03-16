@@ -2,17 +2,32 @@ from __future__ import annotations
 
 import json
 import base64
+import os
 import re
 import shutil
 import subprocess
 import sys
 import threading
 import uuid
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 import tempfile
 
 from flask import Flask, jsonify, render_template, request
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('lut_process.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +40,8 @@ FAVORITES_FILE = ROOT / "lut_favorites.json"
 
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 ALLOWED_LUT_EXT = {".cube"}
+DEFAULT_MAX_DIM = 1440
+ALLOWED_EXPORT_MAX_DIMS = {720, 1440, 3840}
 
 app = Flask(__name__, template_folder="static", static_folder="static")
 JOBS: dict[str, dict] = {}
@@ -85,7 +102,7 @@ def collect_luts() -> list[dict]:
 
 
 def load_favorite_ids() -> set[str]:
-    # 处理以前的隐藏文件迁移
+    # Migrate legacy favorites file name.
     legacy_file = ROOT / ".lut_favorites.json"
     if legacy_file.exists() and not FAVORITES_FILE.exists():
         try:
@@ -99,8 +116,8 @@ def load_favorite_ids() -> set[str]:
         data = json.loads(FAVORITES_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, list):
             return set()
-        
-        # 兼容旧版本保存的 "builtin:" 和 "custom:" 前缀
+
+        # Convert old id prefixes ("builtin:" / "custom:") to current "lut:" ids.
         new_ids = set()
         for item in data:
             item_str = str(item)
@@ -113,7 +130,6 @@ def load_favorite_ids() -> set[str]:
         return new_ids
     except Exception:
         return set()
-
 
 def save_favorite_ids(ids: set[str]) -> None:
     FAVORITES_FILE.write_text(
@@ -174,9 +190,9 @@ def ensure_dirs() -> None:
 
 def open_folder(path: Path) -> tuple[bool, str]:
     if not path.exists():
-        return False, "目录不存在。"
+        return False, "Directory does not exist."
     if not path.is_dir():
-        return False, "路径不是目录。"
+        return False, "Path is not a directory."
 
     cmd: list[str] | None = None
     if sys.platform.startswith("darwin"):
@@ -187,7 +203,7 @@ def open_folder(path: Path) -> tuple[bool, str]:
         cmd = ["xdg-open", str(path)]
 
     if cmd is None:
-        return False, "当前系统不支持自动打开目录。"
+        return False, "Auto-open folder is not supported on this system."
 
     try:
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -204,8 +220,16 @@ def build_filter_chain(
     unsharp_amount: float,
     clarity_contrast: float,
 ) -> str:
-    escaped_lut_path = lut_path.as_posix().replace("'", "\\'")
-    filter_chain = f"lut3d=file='{escaped_lut_path}'"
+    # Build FFmpeg lut3d path in a Windows-safe format.
+    # - Use forward slashes to avoid backslash escaping issues.
+    # - Escape drive-letter style as `C\:/...` to satisfy FFmpeg parser.
+    lut_abs = str(lut_path.resolve())
+    lut_posix = lut_abs.replace("\\", "/")
+    if len(lut_posix) >= 3 and lut_posix[1:3] == ":/":
+        lut_posix = lut_posix[0] + r"\:/" + lut_posix[3:]
+    lut_escaped = lut_posix.replace("'", "\\'")
+
+    filter_chain = f"lut3d=file='{lut_escaped}'"
     if chromashift_px > 0:
         shift = f"{chromashift_px:.2f}"
         filter_chain = f"{filter_chain},chromashift=cbh=-{shift}:cbv=-{shift}:crh={shift}:crv={shift}"
@@ -219,6 +243,25 @@ def build_filter_chain(
         filter_chain = f"{filter_chain},noise=alls={noise_strength}:allf=t+u"
     return filter_chain
 
+
+def scale_to_max_dim_filter(max_dim: int) -> str:
+    # Keep the longest edge within max_dim before applying LUT/effects.
+    return (
+        "scale="
+        f"'if(gte(iw,ih),min(iw,{max_dim}),-2)':"
+        f"'if(gte(ih,iw),min(ih,{max_dim}),-2)':"
+        "flags=lanczos"
+    )
+
+
+def parse_max_dim(raw_value: str | None) -> int:
+    try:
+        max_dim = int((raw_value or "").strip() or str(DEFAULT_MAX_DIM))
+    except ValueError:
+        raise ValueError("max_dim must be one of 720, 1440, or 3840.")
+    if max_dim not in ALLOWED_EXPORT_MAX_DIMS:
+        raise ValueError("max_dim must be one of 720, 1440, or 3840.")
+    return max_dim
 
 @app.get("/")
 def index():
@@ -243,9 +286,9 @@ def api_favorites_bulk():
     favorite_raw = payload.get("favorite")
 
     if not isinstance(lut_ids_raw, list):
-        return jsonify({"error": "lut_ids 必须是数组。"}), 400
+        return jsonify({"error": "lut_ids must be an array."}), 400
     if not isinstance(favorite_raw, bool):
-        return jsonify({"error": "favorite 必须是布尔值。"}), 400
+        return jsonify({"error": "favorite must be a boolean."}), 400
 
     lut_ids = {str(item) for item in lut_ids_raw}
     valid_ids = {item["id"] for item in collect_luts()}
@@ -269,7 +312,7 @@ def api_luts_delete():
     payload = request.get_json(silent=True) or {}
     lut_ids_raw = payload.get("lut_ids")
     if not isinstance(lut_ids_raw, list):
-        return jsonify({"error": "lut_ids 必须是数组。"}), 400
+        return jsonify({"error": "lut_ids must be an array."}), 400
 
     lut_ids = [str(item) for item in lut_ids_raw]
     deleted: list[str] = []
@@ -306,7 +349,7 @@ def api_open_output():
     payload = request.get_json(silent=True) or {}
     path_raw = payload.get("path")
     if not isinstance(path_raw, str) or not path_raw.strip():
-        return jsonify({"error": "path 参数不能为空。"}), 400
+        return jsonify({"error": "path cannot be empty."}), 400
 
     p = Path(path_raw).expanduser().resolve()
     ok, err = open_folder(p)
@@ -359,7 +402,9 @@ def _process_job(
     unsharp_amount: float,
     clarity_strength: int,
     clarity_contrast: float,
+    max_dim: int,
     run_tmp: Path,
+    use_gpu: bool,
 ) -> None:
     total = len(saved_images) * len(lut_paths)
     done = 0
@@ -368,48 +413,73 @@ def _process_job(
     logs: list[str] = []
     outputs: list[str] = []
 
+    def run_one(image_path: Path, lut_path: Path) -> tuple[bool, str | None, str | None]:
+        lut_name = safe_name(lut_path.stem)
+        out_name = f"{safe_name(image_path.stem)}__{lut_name}.jpg"
+        out_path = output_dir / out_name
+        effect_chain = build_filter_chain(
+            lut_path,
+            noise_strength,
+            chromashift_px,
+            vignette_angle,
+            unsharp_amount,
+            clarity_contrast,
+        )
+        filter_chain = f"{scale_to_max_dim_filter(max_dim)},{effect_chain}"
+
+        cmd: list[str] = ["ffmpeg"]
+        if use_gpu:
+            cmd += ["-hwaccel", "auto"]
+        cmd += [
+            "-y",
+            "-i",
+            str(image_path.resolve()),
+            "-vf",
+            filter_chain,
+            "-c:v",
+            "mjpeg",
+            "-q:v",
+            "2",
+            "-pix_fmt",
+            "yuvj420p",
+            "-frames:v",
+            "1",
+            str(out_path.resolve()),
+        ]
+
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, shell=False)
+        if proc.returncode == 0:
+            return True, str(out_path), None
+
+        err_lines = (proc.stderr or "").strip().splitlines()
+        err_msg = err_lines[-1] if err_lines else "Unknown error"
+        return False, None, f"Failed: {image_path.name} + {lut_path.name} -> {err_msg}"
+
     try:
-        for image_path in saved_images:
-            for lut_path in lut_paths:
-                lut_name = safe_name(lut_path.stem)
-                out_name = f"{safe_name(image_path.stem)}__{lut_name}.png"
-                out_path = output_dir / out_name
-                filter_chain = build_filter_chain(
-                    lut_path,
-                    noise_strength,
-                    chromashift_px,
-                    vignette_angle,
-                    unsharp_amount,
-                    clarity_contrast,
-                )
+        tasks: list[tuple[Path, Path]] = [
+            (image_path, lut_path) for image_path in saved_images for lut_path in lut_paths
+        ]
+        if total <= 1:
+            max_workers = 1
+        elif use_gpu:
+            max_workers = min(2, total)
+        else:
+            cpu_count = os.cpu_count() or 4
+            max_workers = min(max(2, cpu_count), 8, total)
 
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    str(image_path),
-                    "-vf",
-                    filter_chain,
-                    "-c:v",
-                    "png",
-                    "-compression_level",
-                    "0",
-                    "-pix_fmt",
-                    "rgb24",
-                    "-frames:v",
-                    "1",
-                    str(out_path),
-                ]
-
-                proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(run_one, image_path, lut_path): (image_path, lut_path) for image_path, lut_path in tasks}
+            for future in as_completed(futures):
+                ok, output_path, err = future.result()
                 done += 1
-                if proc.returncode == 0:
+                if ok:
                     success += 1
-                    outputs.append(str(out_path))
+                    if output_path:
+                        outputs.append(output_path)
                 else:
                     failed += 1
-                    err_lines = (proc.stderr or "").strip().splitlines()
-                    logs.append(f"失败: {image_path.name} + {lut_path.name} -> {(err_lines[-1] if err_lines else '未知错误')}")
+                    if err:
+                        logs.append(err)
 
                 with JOBS_LOCK:
                     if job_id in JOBS:
@@ -426,7 +496,7 @@ def _process_job(
                     "total": total,
                     "success": success,
                     "failed": failed,
-                    "output_format": "png",
+                    "output_format": "jpg",
                     "grain_strength": grain_strength,
                     "ffmpeg_noise_strength": noise_strength,
                     "dispersion_strength": dispersion_strength,
@@ -437,6 +507,7 @@ def _process_job(
                     "ffmpeg_unsharp_amount": unsharp_amount,
                     "clarity_strength": clarity_strength,
                     "ffmpeg_clarity_contrast": clarity_contrast,
+                    "max_dim": max_dim,
                     "output_dir": str(output_dir.resolve()),
                     "outputs": outputs[:200],
                     "log_tail": logs[-50:],
@@ -455,7 +526,7 @@ def api_process_start():
     ensure_dirs()
 
     if shutil.which("ffmpeg") is None:
-        return jsonify({"error": "未检测到 ffmpeg，请先安装 ffmpeg。"}), 400
+        return jsonify({"error": "ffmpeg not found. Please install ffmpeg first."}), 400
 
     images = request.files.getlist("images")
     selected_luts_raw = request.form.get("selected_luts", "[]")
@@ -465,55 +536,61 @@ def api_process_start():
     vignette_strength_raw = request.form.get("vignette_strength", "30")
     sharpen_strength_raw = request.form.get("sharpen_strength", "0")
     clarity_strength_raw = request.form.get("clarity_strength", "0")
+    max_dim_raw = request.form.get("max_dim", str(DEFAULT_MAX_DIM))
+    use_gpu_raw = (request.form.get("use_gpu", "0") or "").strip()
 
     try:
         selected_lut_ids = json.loads(selected_luts_raw)
         if not isinstance(selected_lut_ids, list):
             raise ValueError
     except Exception:
-        return jsonify({"error": "selected_luts 参数格式错误。"}), 400
+        return jsonify({"error": "selected_luts format is invalid."}), 400
 
     try:
         grain_strength = int(grain_strength_raw)
     except ValueError:
-        return jsonify({"error": "grain_strength 必须是 0-100 的整数。"}), 400
+        return jsonify({"error": "grain_strength must be an integer in 0-100."}), 400
     try:
         dispersion_strength = int(dispersion_strength_raw)
     except ValueError:
-        return jsonify({"error": "dispersion_strength 必须是 0-100 的整数。"}), 400
+        return jsonify({"error": "dispersion_strength must be an integer in 0-100."}), 400
     try:
         vignette_strength = int(vignette_strength_raw)
     except ValueError:
-        return jsonify({"error": "vignette_strength 必须是 0-100 的整数。"}), 400
+        return jsonify({"error": "vignette_strength must be an integer in 0-100."}), 400
     try:
         sharpen_strength = int(sharpen_strength_raw)
     except ValueError:
-        return jsonify({"error": "sharpen_strength 必须是 -100 到 100 的整数。"}), 400
+        return jsonify({"error": "sharpen_strength must be an integer in -100 to 100."}), 400
     try:
         clarity_strength = int(clarity_strength_raw)
     except ValueError:
-        return jsonify({"error": "clarity_strength 必须是 -100 到 100 的整数。"}), 400
+        return jsonify({"error": "clarity_strength must be an integer in -100 to 100."}), 400
+    try:
+        max_dim = parse_max_dim(max_dim_raw)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     if not images:
-        return jsonify({"error": "请至少上传 1 张图片。"}), 400
+        return jsonify({"error": "Please upload at least one image."}), 400
     if not selected_lut_ids:
-        return jsonify({"error": "请至少选择 1 个 LUT。"}), 400
+        return jsonify({"error": "Please select at least one LUT."}), 400
     if grain_strength < 0 or grain_strength > 100:
-        return jsonify({"error": "grain_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "grain_strength must be in 0-100."}), 400
     if dispersion_strength < 0 or dispersion_strength > 100:
-        return jsonify({"error": "dispersion_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "dispersion_strength must be in 0-100."}), 400
     if vignette_strength < 0 or vignette_strength > 100:
-        return jsonify({"error": "vignette_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "vignette_strength must be in 0-100."}), 400
     if sharpen_strength < -100 or sharpen_strength > 100:
-        return jsonify({"error": "sharpen_strength 必须在 -100 到 100 之间。"}), 400
+        return jsonify({"error": "sharpen_strength must be in -100 to 100."}), 400
     if clarity_strength < -100 or clarity_strength > 100:
-        return jsonify({"error": "clarity_strength 必须在 -100 到 100 之间。"}), 400
+        return jsonify({"error": "clarity_strength must be in -100 to 100."}), 400
 
     lut_paths: list[Path] = []
     for lut_id in selected_lut_ids:
         p = lut_id_to_path(str(lut_id))
         if p is None:
-            return jsonify({"error": f"无效 LUT: {lut_id}"}), 400
+            return jsonify({"error": f"Invalid LUT: {lut_id}"}), 400
         lut_paths.append(p)
 
     if output_dir_raw:
@@ -536,7 +613,7 @@ def api_process_start():
         saved_images.append(dst)
     if not saved_images:
         shutil.rmtree(run_tmp, ignore_errors=True)
-        return jsonify({"error": "上传文件里没有有效图片格式。"}), 400
+        return jsonify({"error": "No valid image format found in uploaded files."}), 400
 
     noise_strength = grain_to_noise_strength(grain_strength)
     chromashift_px = dispersion_to_chromashift(dispersion_strength)
@@ -544,6 +621,7 @@ def api_process_start():
     unsharp_amount = sharpen_to_unsharp_amount(sharpen_strength)
     clarity_contrast = clarity_to_contrast(clarity_strength)
     total = len(saved_images) * len(lut_paths)
+    use_gpu = use_gpu_raw == "1"
 
     job_id = uuid.uuid4().hex
     with JOBS_LOCK:
@@ -554,12 +632,14 @@ def api_process_start():
             "total": total,
             "success": 0,
             "failed": 0,
-            "output_format": "png",
+            "output_format": "jpg",
             "grain_strength": grain_strength,
             "dispersion_strength": dispersion_strength,
             "vignette_strength": vignette_strength,
             "sharpen_strength": sharpen_strength,
             "clarity_strength": clarity_strength,
+            "max_dim": max_dim,
+            "use_gpu": use_gpu,
             "output_dir": str(output_dir.resolve()),
             "log_tail": [],
         }
@@ -581,7 +661,9 @@ def api_process_start():
             unsharp_amount,
             clarity_strength,
             clarity_contrast,
+            max_dim,
             run_tmp,
+            use_gpu,
         ),
         daemon=True,
     )
@@ -594,18 +676,18 @@ def api_process_start():
 def api_preview():
     ensure_dirs()
     if shutil.which("ffmpeg") is None:
-        return jsonify({"error": "未检测到 ffmpeg，请先安装 ffmpeg。"}), 400
+        return jsonify({"error": "ffmpeg not found. Please install ffmpeg first."}), 400
 
     image = request.files.get("image")
     lut_id = str(request.form.get("lut_id", "")).strip()
     if image is None:
-        return jsonify({"error": "缺少预览图片。"}), 400
+        return jsonify({"error": "Missing preview image."}), 400
     if not lut_id:
-        return jsonify({"error": "缺少 lut_id。"}), 400
+        return jsonify({"error": "Missing lut_id."}), 400
 
     lut_path = lut_id_to_path(lut_id)
     if lut_path is None:
-        return jsonify({"error": "无效 LUT。"}), 400
+        return jsonify({"error": "Invalid LUT."}), 400
 
     try:
         grain_strength = int(request.form.get("grain_strength", "50"))
@@ -613,26 +695,30 @@ def api_preview():
         vignette_strength = int(request.form.get("vignette_strength", "30"))
         sharpen_strength = int(request.form.get("sharpen_strength", "0"))
         clarity_strength = int(request.form.get("clarity_strength", "0"))
+        max_dim = parse_max_dim(request.form.get("max_dim", str(DEFAULT_MAX_DIM)))
     except ValueError:
-        return jsonify({"error": "预览参数必须是整数。"}), 400
+        return jsonify({"error": "Preview parameters are invalid."}), 400
+
+    use_gpu_raw = (request.form.get("use_gpu", "0") or "").strip()
 
     if not (0 <= grain_strength <= 100):
-        return jsonify({"error": "grain_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "grain_strength must be in 0-100."}), 400
     if not (0 <= dispersion_strength <= 100):
-        return jsonify({"error": "dispersion_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "dispersion_strength must be in 0-100."}), 400
     if not (0 <= vignette_strength <= 100):
-        return jsonify({"error": "vignette_strength 必须在 0-100 之间。"}), 400
+        return jsonify({"error": "vignette_strength must be in 0-100."}), 400
     if not (-100 <= sharpen_strength <= 100):
-        return jsonify({"error": "sharpen_strength 必须在 -100 到 100 之间。"}), 400
+        return jsonify({"error": "sharpen_strength must be in -100 to 100."}), 400
     if not (-100 <= clarity_strength <= 100):
-        return jsonify({"error": "clarity_strength 必须在 -100 到 100 之间。"}), 400
+        return jsonify({"error": "clarity_strength must be in -100 to 100."}), 400
 
     noise_strength = grain_to_noise_strength(grain_strength)
     chromashift_px = dispersion_to_chromashift(dispersion_strength)
     vignette_angle = vignette_to_angle(vignette_strength)
     unsharp_amount = sharpen_to_unsharp_amount(sharpen_strength)
     clarity_contrast = clarity_to_contrast(clarity_strength)
-    filter_chain = build_filter_chain(
+    use_gpu = use_gpu_raw == "1"
+    effect_chain = build_filter_chain(
         lut_path,
         noise_strength,
         chromashift_px,
@@ -640,48 +726,79 @@ def api_preview():
         unsharp_amount,
         clarity_contrast,
     )
+    filter_chain = f"{scale_to_max_dim_filter(max_dim)},{effect_chain}"
 
     suffix = Path(image.filename or "preview.png").suffix.lower()
     if suffix not in ALLOWED_IMAGE_EXT:
         suffix = ".png"
 
+    UPLOADS_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Start preview generation - LUT: {lut_path.name}")
+
     with tempfile.TemporaryDirectory(prefix="lut_preview_", dir=str(UPLOADS_TMP_DIR)) as tmp_dir:
         src_path = Path(tmp_dir) / f"input{suffix}"
-        out_path = Path(tmp_dir) / "preview.png"
+        out_path = Path(tmp_dir) / "preview.jpg"
         image.save(src_path)
 
-        cmd = [
-            "ffmpeg",
+        src_abs = str(src_path.resolve())
+        out_abs = str(out_path.resolve())
+
+        cmd: list[str] = ["ffmpeg"]
+        if use_gpu:
+            cmd += ["-hwaccel", "auto"]
+        cmd += [
             "-y",
             "-i",
-            str(src_path),
+            src_abs,
             "-vf",
-            f"{filter_chain},scale='min(960,iw)':-2:flags=lanczos",
+            filter_chain,
             "-c:v",
-            "png",
-            "-compression_level",
-            "1",
+            "mjpeg",
+            "-q:v",
+            "3",
             "-pix_fmt",
-            "rgb24",
+            "yuvj420p",
             "-frames:v",
             "1",
-            str(out_path),
+            out_abs,
         ]
-        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+
+        logger.info(f"FFmpeg command: {' '.join(cmd)}")
+        logger.info(f"Input path: {src_abs}")
+        logger.info(f"Output path: {out_abs}")
+        logger.info(f"Filter Chain: {filter_chain}")
+
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=False)
+
+        logger.info(f"FFmpeg return code: {proc.returncode}")
+        if proc.stdout:
+            logger.info(f"FFmpeg stdout: {proc.stdout[:500]}")
+        if proc.stderr:
+            logger.error(f"FFmpeg stderr: {proc.stderr[:1000]}")
+        logger.info(f"Output exists: {out_path.exists()}")
+
         if proc.returncode != 0 or not out_path.exists():
-            err_lines = (proc.stderr or "").strip().splitlines()
-            return jsonify({"error": err_lines[-1] if err_lines else "预览生成失败。"}), 500
+            err_msg = proc.stderr or "Preview generation failed."
+            err_lines = err_msg.strip().splitlines()
+            error_text = err_lines[-1] if err_lines else err_msg
+            logger.error(f"Preview processing failed: {error_text}")
+            return jsonify(
+                {
+                    "error": error_text,
+                    "debug_cmd": " ".join(cmd) if sys.platform.startswith("win") else "",
+                    "stderr": proc.stderr[-500:] if proc.stderr else "",
+                }
+            ), 500
 
         payload = base64.b64encode(out_path.read_bytes()).decode("ascii")
-        return jsonify({"image_data_url": f"data:image/png;base64,{payload}"})
-
+        return jsonify({"image_data_url": f"data:image/jpeg;base64,{payload}"})
 
 @app.get("/api/process/status/<job_id>")
 def api_process_status(job_id: str):
     with JOBS_LOCK:
         job = JOBS.get(job_id)
         if job is None:
-            return jsonify({"error": "任务不存在或已过期。"}), 404
+            return jsonify({"error": "Task not found or expired."}), 404
         payload = dict(job)
     return jsonify(payload)
 

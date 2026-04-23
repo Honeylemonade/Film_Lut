@@ -42,6 +42,21 @@ ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 ALLOWED_LUT_EXT = {".cube"}
 DEFAULT_MAX_DIM = 1440
 ALLOWED_EXPORT_MAX_DIMS = {720, 1440, 3840}
+DEFAULT_GRAIN_STRENGTH = 38
+DEFAULT_DISPERSION_STRENGTH = 8
+DEFAULT_VIGNETTE_STRENGTH = 18
+DEFAULT_SHARPEN_STRENGTH = -10
+DEFAULT_CLARITY_STRENGTH = -8
+DEFAULT_HIGHLIGHT_ROLLOFF_STRENGTH = 35
+DEFAULT_HALATION_STRENGTH = 22
+DEFAULT_BLOOM_STRENGTH = 18
+DEFAULT_SHADOW_LIFT_STRENGTH = 16
+DEFAULT_TOE_STRENGTH = 28
+DEFAULT_SHOULDER_STRENGTH = 42
+DEFAULT_HIGHLIGHT_SATURATION = -18
+DEFAULT_SHADOW_SATURATION = -10
+DEFAULT_HIGHLIGHT_WARMTH = 8
+DEFAULT_SHADOW_COOLNESS = 6
 
 app = Flask(__name__, template_folder="static", static_folder="static")
 JOBS: dict[str, dict] = {}
@@ -81,6 +96,99 @@ def clarity_to_contrast(clarity_strength: int) -> float:
     clarity_strength = max(-100, min(100, clarity_strength))
     # eq contrast: 1.0 (off), lower reduces clarity, higher boosts clarity
     return round(1.0 + (clarity_strength / 100) * 0.35, 3)
+
+
+def highlight_rolloff_to_curve(highlight_rolloff_strength: int) -> str | None:
+    highlight_rolloff_strength = max(0, min(100, highlight_rolloff_strength))
+    if highlight_rolloff_strength == 0:
+        return None
+
+    ratio = highlight_rolloff_strength / 100
+    shoulder_y = round(0.75 - ratio * 0.08, 3)
+    white_y = round(1.0 - ratio * 0.10, 3)
+    return f"curves=all='0/0 0.55/0.55 0.75/{shoulder_y} 1/{white_y}'"
+
+
+def shadow_lift_to_curve(shadow_lift_strength: int) -> str | None:
+    shadow_lift_strength = max(0, min(100, shadow_lift_strength))
+    if shadow_lift_strength == 0:
+        return None
+
+    ratio = shadow_lift_strength / 100
+    black_y = round(ratio * 0.07, 3)
+    quarter_y = round(0.25 + ratio * 0.07, 3)
+    return f"curves=all='0/{black_y} 0.25/{quarter_y} 0.75/0.75 1/1'"
+
+
+def toe_strength_to_curve(toe_strength: int) -> str | None:
+    toe_strength = max(0, min(100, toe_strength))
+    if toe_strength == 0:
+        return None
+
+    ratio = toe_strength / 100
+    lower_mid_y = round(0.12 + ratio * 0.08, 3)
+    quarter_y = round(0.30 + ratio * 0.08, 3)
+    return f"curves=all='0/0 0.12/{lower_mid_y} 0.30/{quarter_y} 0.72/0.72 1/1'"
+
+
+def shoulder_strength_to_curve(shoulder_strength: int) -> str | None:
+    shoulder_strength = max(0, min(100, shoulder_strength))
+    if shoulder_strength == 0:
+        return None
+
+    ratio = shoulder_strength / 100
+    shoulder_y = round(0.84 - ratio * 0.09, 3)
+    white_y = round(1.0 - ratio * 0.06, 3)
+    return f"curves=all='0/0 0.62/0.62 0.84/{shoulder_y} 1/{white_y}'"
+
+
+def saturation_strength_to_factor(saturation_strength: int) -> float:
+    saturation_strength = max(-100, min(100, saturation_strength))
+    return round(1.0 + (saturation_strength / 100) * 0.55, 3)
+
+
+def warmth_strength_to_colorbalance(highlight_warmth: int) -> tuple[float, float, float]:
+    highlight_warmth = max(-100, min(100, highlight_warmth))
+    ratio = highlight_warmth / 100
+    rh = round(ratio * 0.16, 3)
+    gh = round(ratio * 0.035, 3)
+    bh = round(-ratio * 0.13, 3)
+    return rh, gh, bh
+
+
+def coolness_strength_to_colorbalance(shadow_coolness: int) -> tuple[float, float, float]:
+    shadow_coolness = max(-100, min(100, shadow_coolness))
+    ratio = shadow_coolness / 100
+    rs = round(-ratio * 0.10, 3)
+    gs = round(ratio * 0.025, 3)
+    bs = round(ratio * 0.16, 3)
+    return rs, gs, bs
+
+
+def tone_mask_curve(mask_type: str) -> str:
+    if mask_type == "shadow":
+        return "curves=all='0/1 0.18/0.96 0.42/0.22 0.62/0 1/0'"
+    return "curves=all='0/0 0.42/0 0.68/0.18 0.86/0.92 1/1'"
+
+
+def halation_opacity(halation_strength: int) -> float:
+    halation_strength = max(0, min(100, halation_strength))
+    return round((halation_strength / 100) * 0.32, 3)
+
+
+def halation_sigma(halation_strength: int) -> float:
+    halation_strength = max(0, min(100, halation_strength))
+    return round(2.0 + (halation_strength / 100) * 6.0, 2)
+
+
+def bloom_opacity(bloom_strength: int) -> float:
+    bloom_strength = max(0, min(100, bloom_strength))
+    return round((bloom_strength / 100) * 0.24, 3)
+
+
+def bloom_sigma(bloom_strength: int) -> float:
+    bloom_strength = max(0, min(100, bloom_strength))
+    return round(6.0 + (bloom_strength / 100) * 12.0, 2)
 
 
 def collect_luts() -> list[dict]:
@@ -219,6 +327,16 @@ def build_filter_chain(
     vignette_angle: float,
     unsharp_amount: float,
     clarity_contrast: float,
+    highlight_rolloff_strength: int,
+    halation_strength: int,
+    bloom_strength: int,
+    shadow_lift_strength: int,
+    toe_strength: int,
+    shoulder_strength: int,
+    highlight_saturation: int,
+    shadow_saturation: int,
+    highlight_warmth: int,
+    shadow_coolness: int,
 ) -> str:
     # Build FFmpeg lut3d path in a Windows-safe format.
     # - Use forward slashes to avoid backslash escaping issues.
@@ -229,16 +347,100 @@ def build_filter_chain(
         lut_posix = lut_posix[0] + r"\:/" + lut_posix[3:]
     lut_escaped = lut_posix.replace("'", "\\'")
 
-    filter_chain = f"lut3d=file='{lut_escaped}'"
+    base_filters = [f"lut3d=file='{lut_escaped}'"]
+    shadow_curve = shadow_lift_to_curve(shadow_lift_strength)
+    if shadow_curve is not None:
+        base_filters.append(shadow_curve)
+    toe_curve = toe_strength_to_curve(toe_strength)
+    if toe_curve is not None:
+        base_filters.append(toe_curve)
+    highlight_curve = highlight_rolloff_to_curve(highlight_rolloff_strength)
+    if highlight_curve is not None:
+        base_filters.append(highlight_curve)
+    shoulder_curve = shoulder_strength_to_curve(shoulder_strength)
+    if shoulder_curve is not None:
+        base_filters.append(shoulder_curve)
     if chromashift_px > 0:
         shift = f"{chromashift_px:.2f}"
-        filter_chain = f"{filter_chain},chromashift=cbh=-{shift}:cbv=-{shift}:crh={shift}:crv={shift}"
+        base_filters.append(f"chromashift=cbh=-{shift}:cbv=-{shift}:crh={shift}:crv={shift}")
     if vignette_angle > 0:
-        filter_chain = f"{filter_chain},vignette=angle={vignette_angle:.3f}"
+        base_filters.append(f"vignette=angle={vignette_angle:.3f}")
     if abs(unsharp_amount) > 1e-6:
-        filter_chain = f"{filter_chain},unsharp=5:5:{unsharp_amount:.2f}:5:5:0.0"
+        base_filters.append(f"unsharp=5:5:{unsharp_amount:.2f}:5:5:0.0")
     if abs(clarity_contrast - 1.0) > 1e-6:
-        filter_chain = f"{filter_chain},eq=contrast={clarity_contrast:.3f}"
+        base_filters.append(f"eq=contrast={clarity_contrast:.3f}")
+    rs, gs, bs = coolness_strength_to_colorbalance(shadow_coolness)
+    rh, gh, bh = warmth_strength_to_colorbalance(highlight_warmth)
+    if any(abs(item) > 1e-6 for item in (rs, gs, bs, rh, gh, bh)):
+        base_filters.append(
+            "colorbalance="
+            f"rs={rs:.3f}:gs={gs:.3f}:bs={bs:.3f}:"
+            f"rh={rh:.3f}:gh={gh:.3f}:bh={bh:.3f}:pl=1"
+        )
+
+    graph_parts = [",".join(base_filters)]
+    current_label: str | None = None
+
+    if any(
+        value != 0
+        for value in (
+            highlight_saturation,
+            shadow_saturation,
+            halation_strength,
+            bloom_strength,
+        )
+    ):
+        current_label = "film_base"
+        graph_parts[0] = f"{graph_parts[0]}[{current_label}]"
+
+    if shadow_saturation != 0 and current_label is not None:
+        graph_parts.append(
+            f"[{current_label}]split=3[shadow_base][shadow_fxsrc][shadow_masksrc]"
+            f";[shadow_fxsrc]eq=saturation={saturation_strength_to_factor(shadow_saturation):.3f}[shadow_fx]"
+            f";[shadow_masksrc]format=gray,{tone_mask_curve('shadow')}[shadow_mask]"
+            ";[shadow_base][shadow_fx][shadow_mask]maskedmerge[film_shadow_sat]"
+        )
+        current_label = "film_shadow_sat"
+
+    if highlight_saturation != 0 and current_label is not None:
+        graph_parts.append(
+            f"[{current_label}]split=3[highlight_base][highlight_fxsrc][highlight_masksrc]"
+            f";[highlight_fxsrc]eq=saturation={saturation_strength_to_factor(highlight_saturation):.3f}[highlight_fx]"
+            f";[highlight_masksrc]format=gray,{tone_mask_curve('highlight')}[highlight_mask]"
+            ";[highlight_base][highlight_fx][highlight_mask]maskedmerge[film_highlight_sat]"
+        )
+        current_label = "film_highlight_sat"
+
+    if halation_strength > 0 and current_label is not None:
+        graph_parts.append(
+            f"[{current_label}]split=2[hal_base][hal_src]"
+            f";[hal_src]gblur=sigma={halation_sigma(halation_strength):.2f}:steps=2,"
+            "curves=all='0/0 0.72/0 0.90/0.30 1/1',"
+            "colorchannelmixer=rr=1:rg=0.04:rb=0:gr=0:gg=0.55:gb=0:br=0:bg=0:bb=0.18[hal_fx]"
+            f";[hal_base][hal_fx]blend=all_mode=screen:all_opacity={halation_opacity(halation_strength):.3f}[film_hal]"
+        )
+        current_label = "film_hal"
+
+    if bloom_strength > 0 and current_label is not None:
+        graph_parts.append(
+            f"[{current_label}]split=2[bloom_base][bloom_src]"
+            f";[bloom_src]gblur=sigma={bloom_sigma(bloom_strength):.2f}:steps=2,"
+            "curves=all='0/0 0.58/0 0.84/0.24 1/0.88'[bloom_fx]"
+            f";[bloom_base][bloom_fx]blend=all_mode=screen:all_opacity={bloom_opacity(bloom_strength):.3f}[film_bloom]"
+        )
+        current_label = "film_bloom"
+
+    if current_label is not None:
+        tail_filters = []
+        if noise_strength > 0:
+            tail_filters.append(f"noise=alls={noise_strength}:allf=t+u")
+        if tail_filters:
+            graph_parts.append(f"[{current_label}]{','.join(tail_filters)}")
+        else:
+            graph_parts.append(f"[{current_label}]null")
+        return ";".join(graph_parts)
+
+    filter_chain = graph_parts[0]
     if noise_strength > 0:
         filter_chain = f"{filter_chain},noise=alls={noise_strength}:allf=t+u"
     return filter_chain
@@ -402,6 +604,16 @@ def _process_job(
     unsharp_amount: float,
     clarity_strength: int,
     clarity_contrast: float,
+    highlight_rolloff_strength: int,
+    halation_strength: int,
+    bloom_strength: int,
+    shadow_lift_strength: int,
+    toe_strength: int,
+    shoulder_strength: int,
+    highlight_saturation: int,
+    shadow_saturation: int,
+    highlight_warmth: int,
+    shadow_coolness: int,
     max_dim: int,
     run_tmp: Path,
     use_gpu: bool,
@@ -424,6 +636,16 @@ def _process_job(
             vignette_angle,
             unsharp_amount,
             clarity_contrast,
+            highlight_rolloff_strength,
+            halation_strength,
+            bloom_strength,
+            shadow_lift_strength,
+            toe_strength,
+            shoulder_strength,
+            highlight_saturation,
+            shadow_saturation,
+            highlight_warmth,
+            shadow_coolness,
         )
         filter_chain = f"{scale_to_max_dim_filter(max_dim)},{effect_chain}"
 
@@ -507,6 +729,18 @@ def _process_job(
                     "ffmpeg_unsharp_amount": unsharp_amount,
                     "clarity_strength": clarity_strength,
                     "ffmpeg_clarity_contrast": clarity_contrast,
+                    "highlight_rolloff_strength": highlight_rolloff_strength,
+                    "halation_strength": halation_strength,
+                    "ffmpeg_halation_opacity": halation_opacity(halation_strength),
+                    "bloom_strength": bloom_strength,
+                    "ffmpeg_bloom_opacity": bloom_opacity(bloom_strength),
+                    "shadow_lift_strength": shadow_lift_strength,
+                    "toe_strength": toe_strength,
+                    "shoulder_strength": shoulder_strength,
+                    "highlight_saturation": highlight_saturation,
+                    "shadow_saturation": shadow_saturation,
+                    "highlight_warmth": highlight_warmth,
+                    "shadow_coolness": shadow_coolness,
                     "max_dim": max_dim,
                     "output_dir": str(output_dir.resolve()),
                     "outputs": outputs[:200],
@@ -531,11 +765,21 @@ def api_process_start():
     images = request.files.getlist("images")
     selected_luts_raw = request.form.get("selected_luts", "[]")
     output_dir_raw = (request.form.get("output_dir", "") or "").strip()
-    grain_strength_raw = request.form.get("grain_strength", "50")
-    dispersion_strength_raw = request.form.get("dispersion_strength", "50")
-    vignette_strength_raw = request.form.get("vignette_strength", "30")
-    sharpen_strength_raw = request.form.get("sharpen_strength", "0")
-    clarity_strength_raw = request.form.get("clarity_strength", "0")
+    grain_strength_raw = request.form.get("grain_strength", str(DEFAULT_GRAIN_STRENGTH))
+    dispersion_strength_raw = request.form.get("dispersion_strength", str(DEFAULT_DISPERSION_STRENGTH))
+    vignette_strength_raw = request.form.get("vignette_strength", str(DEFAULT_VIGNETTE_STRENGTH))
+    sharpen_strength_raw = request.form.get("sharpen_strength", str(DEFAULT_SHARPEN_STRENGTH))
+    clarity_strength_raw = request.form.get("clarity_strength", str(DEFAULT_CLARITY_STRENGTH))
+    highlight_rolloff_strength_raw = request.form.get("highlight_rolloff_strength", str(DEFAULT_HIGHLIGHT_ROLLOFF_STRENGTH))
+    halation_strength_raw = request.form.get("halation_strength", str(DEFAULT_HALATION_STRENGTH))
+    bloom_strength_raw = request.form.get("bloom_strength", str(DEFAULT_BLOOM_STRENGTH))
+    shadow_lift_strength_raw = request.form.get("shadow_lift_strength", str(DEFAULT_SHADOW_LIFT_STRENGTH))
+    toe_strength_raw = request.form.get("toe_strength", str(DEFAULT_TOE_STRENGTH))
+    shoulder_strength_raw = request.form.get("shoulder_strength", str(DEFAULT_SHOULDER_STRENGTH))
+    highlight_saturation_raw = request.form.get("highlight_saturation", str(DEFAULT_HIGHLIGHT_SATURATION))
+    shadow_saturation_raw = request.form.get("shadow_saturation", str(DEFAULT_SHADOW_SATURATION))
+    highlight_warmth_raw = request.form.get("highlight_warmth", str(DEFAULT_HIGHLIGHT_WARMTH))
+    shadow_coolness_raw = request.form.get("shadow_coolness", str(DEFAULT_SHADOW_COOLNESS))
     max_dim_raw = request.form.get("max_dim", str(DEFAULT_MAX_DIM))
     use_gpu_raw = (request.form.get("use_gpu", "0") or "").strip()
 
@@ -567,6 +811,46 @@ def api_process_start():
     except ValueError:
         return jsonify({"error": "clarity_strength must be an integer in -100 to 100."}), 400
     try:
+        highlight_rolloff_strength = int(highlight_rolloff_strength_raw)
+    except ValueError:
+        return jsonify({"error": "highlight_rolloff_strength must be an integer in 0-100."}), 400
+    try:
+        halation_strength = int(halation_strength_raw)
+    except ValueError:
+        return jsonify({"error": "halation_strength must be an integer in 0-100."}), 400
+    try:
+        bloom_strength = int(bloom_strength_raw)
+    except ValueError:
+        return jsonify({"error": "bloom_strength must be an integer in 0-100."}), 400
+    try:
+        shadow_lift_strength = int(shadow_lift_strength_raw)
+    except ValueError:
+        return jsonify({"error": "shadow_lift_strength must be an integer in 0-100."}), 400
+    try:
+        toe_strength = int(toe_strength_raw)
+    except ValueError:
+        return jsonify({"error": "toe_strength must be an integer in 0-100."}), 400
+    try:
+        shoulder_strength = int(shoulder_strength_raw)
+    except ValueError:
+        return jsonify({"error": "shoulder_strength must be an integer in 0-100."}), 400
+    try:
+        highlight_saturation = int(highlight_saturation_raw)
+    except ValueError:
+        return jsonify({"error": "highlight_saturation must be an integer in -100 to 100."}), 400
+    try:
+        shadow_saturation = int(shadow_saturation_raw)
+    except ValueError:
+        return jsonify({"error": "shadow_saturation must be an integer in -100 to 100."}), 400
+    try:
+        highlight_warmth = int(highlight_warmth_raw)
+    except ValueError:
+        return jsonify({"error": "highlight_warmth must be an integer in -100 to 100."}), 400
+    try:
+        shadow_coolness = int(shadow_coolness_raw)
+    except ValueError:
+        return jsonify({"error": "shadow_coolness must be an integer in -100 to 100."}), 400
+    try:
         max_dim = parse_max_dim(max_dim_raw)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -585,6 +869,26 @@ def api_process_start():
         return jsonify({"error": "sharpen_strength must be in -100 to 100."}), 400
     if clarity_strength < -100 or clarity_strength > 100:
         return jsonify({"error": "clarity_strength must be in -100 to 100."}), 400
+    if highlight_rolloff_strength < 0 or highlight_rolloff_strength > 100:
+        return jsonify({"error": "highlight_rolloff_strength must be in 0-100."}), 400
+    if halation_strength < 0 or halation_strength > 100:
+        return jsonify({"error": "halation_strength must be in 0-100."}), 400
+    if bloom_strength < 0 or bloom_strength > 100:
+        return jsonify({"error": "bloom_strength must be in 0-100."}), 400
+    if shadow_lift_strength < 0 or shadow_lift_strength > 100:
+        return jsonify({"error": "shadow_lift_strength must be in 0-100."}), 400
+    if toe_strength < 0 or toe_strength > 100:
+        return jsonify({"error": "toe_strength must be in 0-100."}), 400
+    if shoulder_strength < 0 or shoulder_strength > 100:
+        return jsonify({"error": "shoulder_strength must be in 0-100."}), 400
+    if highlight_saturation < -100 or highlight_saturation > 100:
+        return jsonify({"error": "highlight_saturation must be in -100 to 100."}), 400
+    if shadow_saturation < -100 or shadow_saturation > 100:
+        return jsonify({"error": "shadow_saturation must be in -100 to 100."}), 400
+    if highlight_warmth < -100 or highlight_warmth > 100:
+        return jsonify({"error": "highlight_warmth must be in -100 to 100."}), 400
+    if shadow_coolness < -100 or shadow_coolness > 100:
+        return jsonify({"error": "shadow_coolness must be in -100 to 100."}), 400
 
     lut_paths: list[Path] = []
     for lut_id in selected_lut_ids:
@@ -638,6 +942,16 @@ def api_process_start():
             "vignette_strength": vignette_strength,
             "sharpen_strength": sharpen_strength,
             "clarity_strength": clarity_strength,
+            "highlight_rolloff_strength": highlight_rolloff_strength,
+            "halation_strength": halation_strength,
+            "bloom_strength": bloom_strength,
+            "shadow_lift_strength": shadow_lift_strength,
+            "toe_strength": toe_strength,
+            "shoulder_strength": shoulder_strength,
+            "highlight_saturation": highlight_saturation,
+            "shadow_saturation": shadow_saturation,
+            "highlight_warmth": highlight_warmth,
+            "shadow_coolness": shadow_coolness,
             "max_dim": max_dim,
             "use_gpu": use_gpu,
             "output_dir": str(output_dir.resolve()),
@@ -661,6 +975,16 @@ def api_process_start():
             unsharp_amount,
             clarity_strength,
             clarity_contrast,
+            highlight_rolloff_strength,
+            halation_strength,
+            bloom_strength,
+            shadow_lift_strength,
+            toe_strength,
+            shoulder_strength,
+            highlight_saturation,
+            shadow_saturation,
+            highlight_warmth,
+            shadow_coolness,
             max_dim,
             run_tmp,
             use_gpu,
@@ -690,11 +1014,21 @@ def api_preview():
         return jsonify({"error": "Invalid LUT."}), 400
 
     try:
-        grain_strength = int(request.form.get("grain_strength", "50"))
-        dispersion_strength = int(request.form.get("dispersion_strength", "50"))
-        vignette_strength = int(request.form.get("vignette_strength", "30"))
-        sharpen_strength = int(request.form.get("sharpen_strength", "0"))
-        clarity_strength = int(request.form.get("clarity_strength", "0"))
+        grain_strength = int(request.form.get("grain_strength", str(DEFAULT_GRAIN_STRENGTH)))
+        dispersion_strength = int(request.form.get("dispersion_strength", str(DEFAULT_DISPERSION_STRENGTH)))
+        vignette_strength = int(request.form.get("vignette_strength", str(DEFAULT_VIGNETTE_STRENGTH)))
+        sharpen_strength = int(request.form.get("sharpen_strength", str(DEFAULT_SHARPEN_STRENGTH)))
+        clarity_strength = int(request.form.get("clarity_strength", str(DEFAULT_CLARITY_STRENGTH)))
+        highlight_rolloff_strength = int(request.form.get("highlight_rolloff_strength", str(DEFAULT_HIGHLIGHT_ROLLOFF_STRENGTH)))
+        halation_strength = int(request.form.get("halation_strength", str(DEFAULT_HALATION_STRENGTH)))
+        bloom_strength = int(request.form.get("bloom_strength", str(DEFAULT_BLOOM_STRENGTH)))
+        shadow_lift_strength = int(request.form.get("shadow_lift_strength", str(DEFAULT_SHADOW_LIFT_STRENGTH)))
+        toe_strength = int(request.form.get("toe_strength", str(DEFAULT_TOE_STRENGTH)))
+        shoulder_strength = int(request.form.get("shoulder_strength", str(DEFAULT_SHOULDER_STRENGTH)))
+        highlight_saturation = int(request.form.get("highlight_saturation", str(DEFAULT_HIGHLIGHT_SATURATION)))
+        shadow_saturation = int(request.form.get("shadow_saturation", str(DEFAULT_SHADOW_SATURATION)))
+        highlight_warmth = int(request.form.get("highlight_warmth", str(DEFAULT_HIGHLIGHT_WARMTH)))
+        shadow_coolness = int(request.form.get("shadow_coolness", str(DEFAULT_SHADOW_COOLNESS)))
         max_dim = parse_max_dim(request.form.get("max_dim", str(DEFAULT_MAX_DIM)))
     except ValueError:
         return jsonify({"error": "Preview parameters are invalid."}), 400
@@ -711,6 +1045,26 @@ def api_preview():
         return jsonify({"error": "sharpen_strength must be in -100 to 100."}), 400
     if not (-100 <= clarity_strength <= 100):
         return jsonify({"error": "clarity_strength must be in -100 to 100."}), 400
+    if not (0 <= highlight_rolloff_strength <= 100):
+        return jsonify({"error": "highlight_rolloff_strength must be in 0-100."}), 400
+    if not (0 <= halation_strength <= 100):
+        return jsonify({"error": "halation_strength must be in 0-100."}), 400
+    if not (0 <= bloom_strength <= 100):
+        return jsonify({"error": "bloom_strength must be in 0-100."}), 400
+    if not (0 <= shadow_lift_strength <= 100):
+        return jsonify({"error": "shadow_lift_strength must be in 0-100."}), 400
+    if not (0 <= toe_strength <= 100):
+        return jsonify({"error": "toe_strength must be in 0-100."}), 400
+    if not (0 <= shoulder_strength <= 100):
+        return jsonify({"error": "shoulder_strength must be in 0-100."}), 400
+    if not (-100 <= highlight_saturation <= 100):
+        return jsonify({"error": "highlight_saturation must be in -100 to 100."}), 400
+    if not (-100 <= shadow_saturation <= 100):
+        return jsonify({"error": "shadow_saturation must be in -100 to 100."}), 400
+    if not (-100 <= highlight_warmth <= 100):
+        return jsonify({"error": "highlight_warmth must be in -100 to 100."}), 400
+    if not (-100 <= shadow_coolness <= 100):
+        return jsonify({"error": "shadow_coolness must be in -100 to 100."}), 400
 
     noise_strength = grain_to_noise_strength(grain_strength)
     chromashift_px = dispersion_to_chromashift(dispersion_strength)
@@ -725,6 +1079,16 @@ def api_preview():
         vignette_angle,
         unsharp_amount,
         clarity_contrast,
+        highlight_rolloff_strength,
+        halation_strength,
+        bloom_strength,
+        shadow_lift_strength,
+        toe_strength,
+        shoulder_strength,
+        highlight_saturation,
+        shadow_saturation,
+        highlight_warmth,
+        shadow_coolness,
     )
     filter_chain = f"{scale_to_max_dim_filter(max_dim)},{effect_chain}"
 

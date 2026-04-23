@@ -53,17 +53,18 @@
       flex-wrap: wrap;
     }
     .stack { display: grid; gap: 10px; }
-    input[type="file"], input[type="text"], input[type="number"], button {
+    input[type="file"], input[type="text"], input[type="number"], select, button {
       font-size: 14px;
     }
-    input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"], select {
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px;
       outline: none;
+      background: #fff;
     }
-    input[type="text"]:focus, input[type="number"]:focus {
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
@@ -239,8 +240,8 @@
     }
     .lut-list {
       width: 100%;
-      min-height: 260px;
-      max-height: 400px;
+      min-height: 0;
+      flex: 1;
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 6px;
@@ -330,7 +331,43 @@
       display: grid;
       grid-template-columns: 74% 10px 26%;
       gap: 0;
-      align-items: stretch;
+      align-items: start;
+    }
+    .preview-side-stack {
+      display: grid;
+      grid-template-rows: minmax(300px, 1.2fr) minmax(320px, 1fr);
+      gap: 16px;
+      min-height: 0;
+      position: sticky;
+      top: 16px;
+      max-height: calc(100vh - 32px);
+    }
+    .preview-side-card {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .settings-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+      display: grid;
+      gap: 10px;
+    }
+    .setting-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .setting-hint {
+      margin-top: -4px;
+    }
+    .primary-action-row {
+      position: sticky;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.8), #ffffff 18px);
+      padding-top: 10px;
     }
     .split-divider {
       cursor: col-resize;
@@ -365,6 +402,23 @@
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
       .preview-lut-layout { grid-template-columns: 1fr; }
+      .preview-side-stack {
+        position: static;
+        max-height: none;
+        grid-template-rows: auto;
+      }
+      .preview-side-card {
+        overflow: visible;
+      }
+      .settings-scroll {
+        overflow: visible;
+        padding-right: 0;
+      }
+      .primary-action-row {
+        position: static;
+        background: transparent;
+        padding-top: 0;
+      }
       .split-divider { display: none; }
       .compare-grid { grid-template-columns: 1fr; }
       .compare-panel { min-height: 320px; }
@@ -411,70 +465,135 @@
         <div class="split-divider-bar"></div>
       </div>
 
-      <div class="card stack">
-        <h2>3) 选择 LUT（可多选）</h2>
-        <div class="tool-row">
-          <button id="refreshBtn" class="secondary sm">刷新</button>
-          <button id="selectAllBtn" class="secondary sm">全选</button>
-          <button id="clearSelBtn" class="secondary sm">清空</button>
-          <button id="deleteSelBtn" class="secondary sm">删除选中</button>
+      <div class="preview-side-stack">
+        <div class="card preview-side-card">
+          <h2>3) 选择 LUT（可多选）</h2>
+          <div class="tool-row">
+            <button id="refreshBtn" class="secondary sm">刷新</button>
+            <button id="selectAllBtn" class="secondary sm">全选</button>
+            <button id="clearSelBtn" class="secondary sm">清空</button>
+            <button id="deleteSelBtn" class="secondary sm">删除选中</button>
+          </div>
+          <div class="tool-row">
+            <button id="pickFavBtn" class="secondary sm">选择收藏</button>
+            <button id="favOnlyBtn" class="secondary sm">只看收藏：关</button>
+          </div>
+          <div id="lutList" class="lut-list"></div>
+          <div id="lutInfo" class="muted"></div>
         </div>
-        <div class="tool-row">
-          <button id="pickFavBtn" class="secondary sm">选择收藏</button>
-          <button id="favOnlyBtn" class="secondary sm">只看收藏：关</button>
+
+        <div class="card preview-side-card">
+          <h2>4) 导出设置</h2>
+          <div class="settings-scroll">
+            <label class="setting-label">导出目录（本机路径，不填则自动生成）</label>
+            <input id="outputDir" type="text" placeholder="例如：C:/Users/yourname/Desktop/exports" />
+
+            <label class="setting-label">输出格式</label>
+            <div class="muted setting-hint">固定为高画质 JPG（体积更小，画质更好）</div>
+            <div class="muted setting-hint">当前默认值偏保守，目标是先压掉数码味，再留出二次微调空间。</div>
+
+            <label class="setting-label">预览 / 导出最长边</label>
+            <select id="maxDim">
+              <option value="720">720 px</option>
+              <option value="1440" selected>1440 px</option>
+              <option value="3840">4K px</option>
+            </select>
+
+            <label class="setting-label">胶片颗粒强度（0-100，0 为关闭）</label>
+            <div class="row">
+              <input id="grain" type="range" min="0" max="100" value="38" style="flex:1;" />
+              <input id="grainNum" type="number" min="0" max="100" value="38" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">色散强度（0-100，0 为关闭）</label>
+            <div class="row">
+              <input id="dispersion" type="range" min="0" max="100" value="8" style="flex:1;" />
+              <input id="dispersionNum" type="number" min="0" max="100" value="8" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">暗角强度（0-100，0 为关闭）</label>
+            <div class="row">
+              <input id="vignette" type="range" min="0" max="100" value="18" style="flex:1;" />
+              <input id="vignetteNum" type="number" min="0" max="100" value="18" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">高光滚降（0-100，压柔亮部）</label>
+            <div class="row">
+              <input id="highlightRolloff" type="range" min="0" max="100" value="35" style="flex:1;" />
+              <input id="highlightRolloffNum" type="number" min="0" max="100" value="35" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">Halation 晕光（0-100，偏暖高光边缘）</label>
+            <div class="row">
+              <input id="halation" type="range" min="0" max="100" value="22" style="flex:1;" />
+              <input id="halationNum" type="number" min="0" max="100" value="22" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">Bloom 柔光扩散（0-100）</label>
+            <div class="row">
+              <input id="bloom" type="range" min="0" max="100" value="18" style="flex:1;" />
+              <input id="bloomNum" type="number" min="0" max="100" value="18" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">阴影抬升（0-100，模拟胶片黑位）</label>
+            <div class="row">
+              <input id="shadowLift" type="range" min="0" max="100" value="16" style="flex:1;" />
+              <input id="shadowLiftNum" type="number" min="0" max="100" value="16" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">阴影脚部 Toe（0-100，更圆润的黑位过渡）</label>
+            <div class="row">
+              <input id="toe" type="range" min="0" max="100" value="28" style="flex:1;" />
+              <input id="toeNum" type="number" min="0" max="100" value="28" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">高光肩部 Shoulder（0-100，更柔的亮部收束）</label>
+            <div class="row">
+              <input id="shoulder" type="range" min="0" max="100" value="42" style="flex:1;" />
+              <input id="shoulderNum" type="number" min="0" max="100" value="42" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">高光饱和度（-100 到 100）</label>
+            <div class="row">
+              <input id="highlightSaturation" type="range" min="-100" max="100" value="-18" style="flex:1;" />
+              <input id="highlightSaturationNum" type="number" min="-100" max="100" value="-18" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">阴影饱和度（-100 到 100）</label>
+            <div class="row">
+              <input id="shadowSaturation" type="range" min="-100" max="100" value="-10" style="flex:1;" />
+              <input id="shadowSaturationNum" type="number" min="-100" max="100" value="-10" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">高光暖调（-100 到 100，正值更暖）</label>
+            <div class="row">
+              <input id="highlightWarmth" type="range" min="-100" max="100" value="8" style="flex:1;" />
+              <input id="highlightWarmthNum" type="number" min="-100" max="100" value="8" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">阴影冷调（-100 到 100，正值更冷）</label>
+            <div class="row">
+              <input id="shadowCoolness" type="range" min="-100" max="100" value="6" style="flex:1;" />
+              <input id="shadowCoolnessNum" type="number" min="-100" max="100" value="6" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">锐化强度（-100 到 100，0 为关闭）</label>
+            <div class="row">
+              <input id="sharpen" type="range" min="-100" max="100" value="-10" style="flex:1;" />
+              <input id="sharpenNum" type="number" min="-100" max="100" value="-10" style="width:90px;" />
+            </div>
+
+            <label class="setting-label">清晰度强度（-100 到 100，0 为关闭）</label>
+            <div class="row">
+              <input id="clarity" type="range" min="-100" max="100" value="-8" style="flex:1;" />
+              <input id="clarityNum" type="number" min="-100" max="100" value="-8" style="width:90px;" />
+            </div>
+          </div>
+
+          <div class="row primary-action-row">
+            <button id="runBtn">5) 开始批量套 LUT</button>
+          </div>
         </div>
-        <div id="lutList" class="lut-list"></div>
-        <div id="lutInfo" class="muted"></div>
-      </div>
-    </div>
-
-    <div class="card stack" style="margin-top:16px;">
-      <h2>4) 导出设置</h2>
-      <label>导出目录（本机路径，不填则自动生成）</label>
-      <input id="outputDir" type="text" placeholder="例如：C:/Users/yourname/Desktop/exports" />
-
-      <label>输出格式</label>
-      <div class="muted">固定为高画质 JPG（体积更小，画质更好）</div>
-
-      <label>预览 / 导出最长边</label>
-      <select id="maxDim">
-        <option value="720">720 px</option>
-        <option value="1440" selected>1440 px</option>
-        <option value="3840">4K px</option>
-      </select>
-
-      <label>胶片颗粒强度（0-100，0 为关闭）</label>
-      <div class="row">
-        <input id="grain" type="range" min="0" max="100" value="50" style="flex:1;" />
-        <input id="grainNum" type="number" min="0" max="100" value="50" style="width:90px;" />
-      </div>
-
-      <label>色散强度（0-100，0 为关闭）</label>
-      <div class="row">
-        <input id="dispersion" type="range" min="0" max="100" value="50" style="flex:1;" />
-        <input id="dispersionNum" type="number" min="0" max="100" value="50" style="width:90px;" />
-      </div>
-
-      <label>暗角强度（0-100，0 为关闭）</label>
-      <div class="row">
-        <input id="vignette" type="range" min="0" max="100" value="30" style="flex:1;" />
-        <input id="vignetteNum" type="number" min="0" max="100" value="30" style="width:90px;" />
-      </div>
-
-      <label>锐化强度（-100 到 100，0 为关闭）</label>
-      <div class="row">
-        <input id="sharpen" type="range" min="-100" max="100" value="0" style="flex:1;" />
-        <input id="sharpenNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
-      </div>
-
-      <label>清晰度强度（-100 到 100，0 为关闭）</label>
-      <div class="row">
-        <input id="clarity" type="range" min="-100" max="100" value="0" style="flex:1;" />
-        <input id="clarityNum" type="number" min="-100" max="100" value="0" style="width:90px;" />
-      </div>
-
-      <div class="row">
-        <button id="runBtn">5) 开始批量套 LUT</button>
       </div>
     </div>
 
@@ -513,6 +632,26 @@
     const dispersionNumEl = document.getElementById('dispersionNum');
     const vignetteEl = document.getElementById('vignette');
     const vignetteNumEl = document.getElementById('vignetteNum');
+    const highlightRolloffEl = document.getElementById('highlightRolloff');
+    const highlightRolloffNumEl = document.getElementById('highlightRolloffNum');
+    const halationEl = document.getElementById('halation');
+    const halationNumEl = document.getElementById('halationNum');
+    const bloomEl = document.getElementById('bloom');
+    const bloomNumEl = document.getElementById('bloomNum');
+    const shadowLiftEl = document.getElementById('shadowLift');
+    const shadowLiftNumEl = document.getElementById('shadowLiftNum');
+    const toeEl = document.getElementById('toe');
+    const toeNumEl = document.getElementById('toeNum');
+    const shoulderEl = document.getElementById('shoulder');
+    const shoulderNumEl = document.getElementById('shoulderNum');
+    const highlightSaturationEl = document.getElementById('highlightSaturation');
+    const highlightSaturationNumEl = document.getElementById('highlightSaturationNum');
+    const shadowSaturationEl = document.getElementById('shadowSaturation');
+    const shadowSaturationNumEl = document.getElementById('shadowSaturationNum');
+    const highlightWarmthEl = document.getElementById('highlightWarmth');
+    const highlightWarmthNumEl = document.getElementById('highlightWarmthNum');
+    const shadowCoolnessEl = document.getElementById('shadowCoolness');
+    const shadowCoolnessNumEl = document.getElementById('shadowCoolnessNum');
     const sharpenEl = document.getElementById('sharpen');
     const sharpenNumEl = document.getElementById('sharpenNum');
     const clarityEl = document.getElementById('clarity');
@@ -579,11 +718,21 @@
     function getCurrentAdjustments() {
       return {
         maxDim: parseInt(maxDimEl.value || '1440', 10),
-        grainStrength: parseInt(grainNumEl.value || '50', 10),
-        dispersionStrength: parseInt(dispersionNumEl.value || '50', 10),
-        vignetteStrength: parseInt(vignetteNumEl.value || '30', 10),
-        sharpenStrength: parseInt(sharpenNumEl.value || '0', 10),
-        clarityStrength: parseInt(clarityNumEl.value || '0', 10),
+        grainStrength: parseInt(grainNumEl.value || '38', 10),
+        dispersionStrength: parseInt(dispersionNumEl.value || '8', 10),
+        vignetteStrength: parseInt(vignetteNumEl.value || '18', 10),
+        highlightRolloffStrength: parseInt(highlightRolloffNumEl.value || '35', 10),
+        halationStrength: parseInt(halationNumEl.value || '22', 10),
+        bloomStrength: parseInt(bloomNumEl.value || '18', 10),
+        shadowLiftStrength: parseInt(shadowLiftNumEl.value || '16', 10),
+        toeStrength: parseInt(toeNumEl.value || '28', 10),
+        shoulderStrength: parseInt(shoulderNumEl.value || '42', 10),
+        highlightSaturation: parseInt(highlightSaturationNumEl.value || '-18', 10),
+        shadowSaturation: parseInt(shadowSaturationNumEl.value || '-10', 10),
+        highlightWarmth: parseInt(highlightWarmthNumEl.value || '8', 10),
+        shadowCoolness: parseInt(shadowCoolnessNumEl.value || '6', 10),
+        sharpenStrength: parseInt(sharpenNumEl.value || '-10', 10),
+        clarityStrength: parseInt(clarityNumEl.value || '-8', 10),
       };
     }
 
@@ -706,6 +855,16 @@
       fd.append('grain_strength', String(adj.grainStrength));
       fd.append('dispersion_strength', String(adj.dispersionStrength));
       fd.append('vignette_strength', String(adj.vignetteStrength));
+      fd.append('highlight_rolloff_strength', String(adj.highlightRolloffStrength));
+      fd.append('halation_strength', String(adj.halationStrength));
+      fd.append('bloom_strength', String(adj.bloomStrength));
+      fd.append('shadow_lift_strength', String(adj.shadowLiftStrength));
+      fd.append('toe_strength', String(adj.toeStrength));
+      fd.append('shoulder_strength', String(adj.shoulderStrength));
+      fd.append('highlight_saturation', String(adj.highlightSaturation));
+      fd.append('shadow_saturation', String(adj.shadowSaturation));
+      fd.append('highlight_warmth', String(adj.highlightWarmth));
+      fd.append('shadow_coolness', String(adj.shadowCoolness));
       fd.append('sharpen_strength', String(adj.sharpenStrength));
       fd.append('clarity_strength', String(adj.clarityStrength));
 
@@ -1023,8 +1182,8 @@
     });
     grainEl.addEventListener('change', refreshActivePreview);
     grainNumEl.addEventListener('input', () => {
-      let v = parseInt(grainNumEl.value || '50', 10);
-      if (Number.isNaN(v)) v = 50;
+      let v = parseInt(grainNumEl.value || '38', 10);
+      if (Number.isNaN(v)) v = 38;
       v = Math.max(0, Math.min(100, v));
       grainNumEl.value = String(v);
       grainEl.value = String(v);
@@ -1035,8 +1194,8 @@
     });
     dispersionEl.addEventListener('change', refreshActivePreview);
     dispersionNumEl.addEventListener('input', () => {
-      let v = parseInt(dispersionNumEl.value || '50', 10);
-      if (Number.isNaN(v)) v = 50;
+      let v = parseInt(dispersionNumEl.value || '8', 10);
+      if (Number.isNaN(v)) v = 8;
       v = Math.max(0, Math.min(100, v));
       dispersionNumEl.value = String(v);
       dispersionEl.value = String(v);
@@ -1047,20 +1206,140 @@
     });
     vignetteEl.addEventListener('change', refreshActivePreview);
     vignetteNumEl.addEventListener('input', () => {
-      let v = parseInt(vignetteNumEl.value || '30', 10);
-      if (Number.isNaN(v)) v = 30;
+      let v = parseInt(vignetteNumEl.value || '18', 10);
+      if (Number.isNaN(v)) v = 18;
       v = Math.max(0, Math.min(100, v));
       vignetteNumEl.value = String(v);
       vignetteEl.value = String(v);
     });
     vignetteNumEl.addEventListener('change', refreshActivePreview);
+    highlightRolloffEl.addEventListener('input', () => {
+      highlightRolloffNumEl.value = highlightRolloffEl.value;
+    });
+    highlightRolloffEl.addEventListener('change', refreshActivePreview);
+    highlightRolloffNumEl.addEventListener('input', () => {
+      let v = parseInt(highlightRolloffNumEl.value || '35', 10);
+      if (Number.isNaN(v)) v = 35;
+      v = Math.max(0, Math.min(100, v));
+      highlightRolloffNumEl.value = String(v);
+      highlightRolloffEl.value = String(v);
+    });
+    highlightRolloffNumEl.addEventListener('change', refreshActivePreview);
+    halationEl.addEventListener('input', () => {
+      halationNumEl.value = halationEl.value;
+    });
+    halationEl.addEventListener('change', refreshActivePreview);
+    halationNumEl.addEventListener('input', () => {
+      let v = parseInt(halationNumEl.value || '22', 10);
+      if (Number.isNaN(v)) v = 22;
+      v = Math.max(0, Math.min(100, v));
+      halationNumEl.value = String(v);
+      halationEl.value = String(v);
+    });
+    halationNumEl.addEventListener('change', refreshActivePreview);
+    bloomEl.addEventListener('input', () => {
+      bloomNumEl.value = bloomEl.value;
+    });
+    bloomEl.addEventListener('change', refreshActivePreview);
+    bloomNumEl.addEventListener('input', () => {
+      let v = parseInt(bloomNumEl.value || '18', 10);
+      if (Number.isNaN(v)) v = 18;
+      v = Math.max(0, Math.min(100, v));
+      bloomNumEl.value = String(v);
+      bloomEl.value = String(v);
+    });
+    bloomNumEl.addEventListener('change', refreshActivePreview);
+    shadowLiftEl.addEventListener('input', () => {
+      shadowLiftNumEl.value = shadowLiftEl.value;
+    });
+    shadowLiftEl.addEventListener('change', refreshActivePreview);
+    shadowLiftNumEl.addEventListener('input', () => {
+      let v = parseInt(shadowLiftNumEl.value || '16', 10);
+      if (Number.isNaN(v)) v = 16;
+      v = Math.max(0, Math.min(100, v));
+      shadowLiftNumEl.value = String(v);
+      shadowLiftEl.value = String(v);
+    });
+    shadowLiftNumEl.addEventListener('change', refreshActivePreview);
+    toeEl.addEventListener('input', () => {
+      toeNumEl.value = toeEl.value;
+    });
+    toeEl.addEventListener('change', refreshActivePreview);
+    toeNumEl.addEventListener('input', () => {
+      let v = parseInt(toeNumEl.value || '28', 10);
+      if (Number.isNaN(v)) v = 28;
+      v = Math.max(0, Math.min(100, v));
+      toeNumEl.value = String(v);
+      toeEl.value = String(v);
+    });
+    toeNumEl.addEventListener('change', refreshActivePreview);
+    shoulderEl.addEventListener('input', () => {
+      shoulderNumEl.value = shoulderEl.value;
+    });
+    shoulderEl.addEventListener('change', refreshActivePreview);
+    shoulderNumEl.addEventListener('input', () => {
+      let v = parseInt(shoulderNumEl.value || '42', 10);
+      if (Number.isNaN(v)) v = 42;
+      v = Math.max(0, Math.min(100, v));
+      shoulderNumEl.value = String(v);
+      shoulderEl.value = String(v);
+    });
+    shoulderNumEl.addEventListener('change', refreshActivePreview);
+    highlightSaturationEl.addEventListener('input', () => {
+      highlightSaturationNumEl.value = highlightSaturationEl.value;
+    });
+    highlightSaturationEl.addEventListener('change', refreshActivePreview);
+    highlightSaturationNumEl.addEventListener('input', () => {
+      let v = parseInt(highlightSaturationNumEl.value || '-18', 10);
+      if (Number.isNaN(v)) v = -18;
+      v = Math.max(-100, Math.min(100, v));
+      highlightSaturationNumEl.value = String(v);
+      highlightSaturationEl.value = String(v);
+    });
+    highlightSaturationNumEl.addEventListener('change', refreshActivePreview);
+    shadowSaturationEl.addEventListener('input', () => {
+      shadowSaturationNumEl.value = shadowSaturationEl.value;
+    });
+    shadowSaturationEl.addEventListener('change', refreshActivePreview);
+    shadowSaturationNumEl.addEventListener('input', () => {
+      let v = parseInt(shadowSaturationNumEl.value || '-10', 10);
+      if (Number.isNaN(v)) v = -10;
+      v = Math.max(-100, Math.min(100, v));
+      shadowSaturationNumEl.value = String(v);
+      shadowSaturationEl.value = String(v);
+    });
+    shadowSaturationNumEl.addEventListener('change', refreshActivePreview);
+    highlightWarmthEl.addEventListener('input', () => {
+      highlightWarmthNumEl.value = highlightWarmthEl.value;
+    });
+    highlightWarmthEl.addEventListener('change', refreshActivePreview);
+    highlightWarmthNumEl.addEventListener('input', () => {
+      let v = parseInt(highlightWarmthNumEl.value || '8', 10);
+      if (Number.isNaN(v)) v = 8;
+      v = Math.max(-100, Math.min(100, v));
+      highlightWarmthNumEl.value = String(v);
+      highlightWarmthEl.value = String(v);
+    });
+    highlightWarmthNumEl.addEventListener('change', refreshActivePreview);
+    shadowCoolnessEl.addEventListener('input', () => {
+      shadowCoolnessNumEl.value = shadowCoolnessEl.value;
+    });
+    shadowCoolnessEl.addEventListener('change', refreshActivePreview);
+    shadowCoolnessNumEl.addEventListener('input', () => {
+      let v = parseInt(shadowCoolnessNumEl.value || '6', 10);
+      if (Number.isNaN(v)) v = 6;
+      v = Math.max(-100, Math.min(100, v));
+      shadowCoolnessNumEl.value = String(v);
+      shadowCoolnessEl.value = String(v);
+    });
+    shadowCoolnessNumEl.addEventListener('change', refreshActivePreview);
     sharpenEl.addEventListener('input', () => {
       sharpenNumEl.value = sharpenEl.value;
     });
     sharpenEl.addEventListener('change', refreshActivePreview);
     sharpenNumEl.addEventListener('input', () => {
-      let v = parseInt(sharpenNumEl.value || '0', 10);
-      if (Number.isNaN(v)) v = 0;
+      let v = parseInt(sharpenNumEl.value || '-10', 10);
+      if (Number.isNaN(v)) v = -10;
       v = Math.max(-100, Math.min(100, v));
       sharpenNumEl.value = String(v);
       sharpenEl.value = String(v);
@@ -1071,8 +1350,8 @@
     });
     clarityEl.addEventListener('change', refreshActivePreview);
     clarityNumEl.addEventListener('input', () => {
-      let v = parseInt(clarityNumEl.value || '0', 10);
-      if (Number.isNaN(v)) v = 0;
+      let v = parseInt(clarityNumEl.value || '-8', 10);
+      if (Number.isNaN(v)) v = -8;
       v = Math.max(-100, Math.min(100, v));
       clarityNumEl.value = String(v);
       clarityEl.value = String(v);
@@ -1175,11 +1454,21 @@
         return;
       }
 
-      const grainStrength = parseInt(grainNumEl.value || '50', 10);
-      const dispersionStrength = parseInt(dispersionNumEl.value || '50', 10);
-      const vignetteStrength = parseInt(vignetteNumEl.value || '30', 10);
-      const sharpenStrength = parseInt(sharpenNumEl.value || '0', 10);
-      const clarityStrength = parseInt(clarityNumEl.value || '0', 10);
+      const grainStrength = parseInt(grainNumEl.value || '38', 10);
+      const dispersionStrength = parseInt(dispersionNumEl.value || '8', 10);
+      const vignetteStrength = parseInt(vignetteNumEl.value || '18', 10);
+      const highlightRolloffStrength = parseInt(highlightRolloffNumEl.value || '35', 10);
+      const halationStrength = parseInt(halationNumEl.value || '22', 10);
+      const bloomStrength = parseInt(bloomNumEl.value || '18', 10);
+      const shadowLiftStrength = parseInt(shadowLiftNumEl.value || '16', 10);
+      const toeStrength = parseInt(toeNumEl.value || '28', 10);
+      const shoulderStrength = parseInt(shoulderNumEl.value || '42', 10);
+      const highlightSaturation = parseInt(highlightSaturationNumEl.value || '-18', 10);
+      const shadowSaturation = parseInt(shadowSaturationNumEl.value || '-10', 10);
+      const highlightWarmth = parseInt(highlightWarmthNumEl.value || '8', 10);
+      const shadowCoolness = parseInt(shadowCoolnessNumEl.value || '6', 10);
+      const sharpenStrength = parseInt(sharpenNumEl.value || '-10', 10);
+      const clarityStrength = parseInt(clarityNumEl.value || '-8', 10);
       const outputDir = (outputDirEl.value || '').trim();
 
       const fd = new FormData();
@@ -1188,6 +1477,16 @@
       fd.append('grain_strength', String(grainStrength));
       fd.append('dispersion_strength', String(dispersionStrength));
       fd.append('vignette_strength', String(vignetteStrength));
+      fd.append('highlight_rolloff_strength', String(highlightRolloffStrength));
+      fd.append('halation_strength', String(halationStrength));
+      fd.append('bloom_strength', String(bloomStrength));
+      fd.append('shadow_lift_strength', String(shadowLiftStrength));
+      fd.append('toe_strength', String(toeStrength));
+      fd.append('shoulder_strength', String(shoulderStrength));
+      fd.append('highlight_saturation', String(highlightSaturation));
+      fd.append('shadow_saturation', String(shadowSaturation));
+      fd.append('highlight_warmth', String(highlightWarmth));
+      fd.append('shadow_coolness', String(shadowCoolness));
       fd.append('sharpen_strength', String(sharpenStrength));
       fd.append('clarity_strength', String(clarityStrength));
       fd.append('output_dir', outputDir);
@@ -1197,7 +1496,7 @@
       setProgress(0, 0, images.length * selectedLuts.length);
       resultEl.textContent = '\u6b63\u5728\u5904\u7406\uff0c\u8bf7\u7a0d\u5019...';
       log(
-          `\u5f00\u59cb\u6279\u91cf\u5904\u7406\uff1a\u56fe\u7247 ${images.length} \u5f20 x LUT ${selectedLuts.length} \u4e2a\uff0c\u8f93\u51fa JPG\uff0c\u6700\u957f\u8fb9 ${parseInt(maxDimEl.value || '1440', 10)}px\uff0c\u9897\u7c92 ${grainStrength}\uff0c\u8272\u6563 ${dispersionStrength}\uff0c\u6697\u89d2 ${vignetteStrength}\uff0c\u9510\u5316 ${sharpenStrength}\uff0c\u6e05\u6670\u5ea6 ${clarityStrength}`
+          `\u5f00\u59cb\u6279\u91cf\u5904\u7406\uff1a\u56fe\u7247 ${images.length} \u5f20 x LUT ${selectedLuts.length} \u4e2a\uff0c\u8f93\u51fa JPG\uff0c\u6700\u957f\u8fb9 ${parseInt(maxDimEl.value || '1440', 10)}px\uff0c\u9897\u7c92 ${grainStrength}\uff0c\u8272\u6563 ${dispersionStrength}\uff0c\u6697\u89d2 ${vignetteStrength}\uff0c\u9ad8\u5149\u6eda\u964d ${highlightRolloffStrength}\uff0chalation ${halationStrength}\uff0cbloom ${bloomStrength}\uff0c\u9634\u5f71\u62ac\u5347 ${shadowLiftStrength}\uff0ctoe ${toeStrength}\uff0cshoulder ${shoulderStrength}\uff0c\u9ad8\u5149\u9971\u548c\u5ea6 ${highlightSaturation}\uff0c\u9634\u5f71\u9971\u548c\u5ea6 ${shadowSaturation}\uff0c\u9ad8\u5149\u6696\u8c03 ${highlightWarmth}\uff0c\u9634\u5f71\u51b7\u8c03 ${shadowCoolness}\uff0c\u9510\u5316 ${sharpenStrength}\uff0c\u6e05\u6670\u5ea6 ${clarityStrength}`
       );
 
       try {
@@ -1229,6 +1528,16 @@
               <div>颗粒：<b>${data.grain_strength}</b>（ffmpeg noise=${data.ffmpeg_noise_strength}）</div>
               <div>色散：<b>${data.dispersion_strength}</b>（ffmpeg chromashift=${data.ffmpeg_chromashift_px}px）</div>
               <div>暗角：<b>${data.vignette_strength}</b>（ffmpeg vignette angle=${data.ffmpeg_vignette_angle}）</div>
+              <div>高光滚降：<b>${data.highlight_rolloff_strength}</b></div>
+              <div>Halation：<b>${data.halation_strength}</b>（blend opacity=${data.ffmpeg_halation_opacity}）</div>
+              <div>Bloom：<b>${data.bloom_strength}</b>（blend opacity=${data.ffmpeg_bloom_opacity}）</div>
+              <div>阴影抬升：<b>${data.shadow_lift_strength}</b></div>
+              <div>阴影脚部 Toe：<b>${data.toe_strength}</b></div>
+              <div>高光肩部 Shoulder：<b>${data.shoulder_strength}</b></div>
+              <div>高光饱和度：<b>${data.highlight_saturation}</b></div>
+              <div>阴影饱和度：<b>${data.shadow_saturation}</b></div>
+              <div>高光暖调：<b>${data.highlight_warmth}</b></div>
+              <div>阴影冷调：<b>${data.shadow_coolness}</b></div>
               <div>锐化：<b>${data.sharpen_strength}</b>（ffmpeg unsharp=${data.ffmpeg_unsharp_amount}）</div>
               <div>清晰度：<b>${data.clarity_strength}</b>（ffmpeg eq contrast=${data.ffmpeg_clarity_contrast}）</div>
             `;
@@ -1279,5 +1588,3 @@
   </script>
 </body>
 </html>
-
-

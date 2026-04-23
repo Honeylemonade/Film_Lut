@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Film LUT Android</string>
+    <string name="server_button">服务地址</string>
+    <string name="reload_button">刷新</string>
+    <string name="retry_button">重试</string>
+    <string name="connect_button">连接服务</string>
+    <string name="use_emulator_button">填入模拟器默认地址</string>
+    <string name="setup_title">连接你的 Film LUT 服务</string>
+    <string name="server_input_hint">http://192.168.1.23:8787/</string>
+    <string name="not_connected">未连接服务</string>
+    <string name="connected_server">当前服务: %1$s</string>
+</resources>

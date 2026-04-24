@@ -1,3 +1,28 @@
 exports/
 .lut_favorites.json
 .DS_Store
+**/.DS_Store
+
+# Python / app runtime scratch
+__pycache__/
+*.py[cod]
+uploads_tmp/
+
+# Android / Gradle local state
+android_app/.gradle/
+android_app/.android-sdk/
+android_app/.android-tools/
+android_app/.gradle-dist/
+android_app/local.properties
+android_app/**/build/
+android_app/build/
+
+# Generated Android artifacts
+android_app/*.apk
+android_app/*.aab
+android_app/app/release/
+android_app/app/debug/
+
+# IDE / local machine files
+.idea/
+*.iml

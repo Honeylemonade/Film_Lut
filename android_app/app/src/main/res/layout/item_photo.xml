@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="68dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="8dp"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:id="@+id/photoFrame"
+        android:layout_width="68dp"
+        android:layout_height="68dp"
+        android:background="@drawable/bg_dark_thumb"
+        android:foreground="?attr/selectableItemBackground">
+
+        <ImageView
+            android:id="@+id/photoThumb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/photoCheck"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-2dp"
+            android:layout_marginEnd="-2dp"
+            android:layout_gravity="top|end"
+            android:contentDescription="@string/photo_batch_check" />
+
+        <TextView
+            android:id="@+id/photoBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="4dp"
+            android:background="@drawable/bg_preview_hint_dark"
+            android:paddingStart="6dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="2dp"
+            android:text="@string/nav_photos"
+            android:textColor="@color/ink_900"
+            android:textSize="8sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/photoLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/editor_text_soft"
+        android:textSize="10sp" />
+</LinearLayout>

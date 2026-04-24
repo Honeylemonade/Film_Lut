@@ -1,10 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface">#F5F7FB</color>
-    <color name="card">#FFFFFF</color>
-    <color name="primary">#2563EB</color>
-    <color name="secondaryButton">#E5E7EB</color>
-    <color name="secondaryButtonText">#111827</color>
-    <color name="textPrimary">#111827</color>
-    <color name="textMuted">#6B7280</color>
+    <color name="ink_900">#FF202124</color>
+    <color name="ink_700">#FF4F4A45</color>
+    <color name="ink_500">#FF8B8580</color>
+    <color name="surface">#FFFBFAF7</color>
+    <color name="surface_alt">#FFF3F0EA</color>
+    <color name="card">#F9FFFFFF</color>
+    <color name="card_strong">#FFFFFFFF</color>
+    <color name="line_soft">#17395A80</color>
+    <color name="line_strong">#2D4E6782</color>
+    <color name="brand">#FF2F6B4F</color>
+    <color name="brand_deep">#FF244C3A</color>
+    <color name="mint">#FFDCE9DE</color>
+    <color name="gold">#FFECCB7B</color>
+    <color name="coral">#FFE8A68D</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black_10">#1A000000</color>
+    <color name="editor_bg">#FFFBFAF7</color>
+    <color name="editor_panel">#FFFFFFFF</color>
+    <color name="editor_panel_alt">#FFF8F6F1</color>
+    <color name="editor_line">#FFE4E0D8</color>
+    <color name="editor_text_muted">#FF6F6A64</color>
+    <color name="editor_text_soft">#FF9A948C</color>
+    <color name="editor_nav_bg">#FFFBFAF7</color>
+    <color name="editor_chip_bg">#FFF1EEE7</color>
+    <color name="editor_chip_selected">#FFE7E2D8</color>
+    <color name="editor_chip_text_selected">#FF202124</color>
+    <color name="notion_shadow">#14000000</color>
 </resources>

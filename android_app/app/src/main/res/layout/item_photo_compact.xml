@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="62dp"
+    android:layout_height="62dp"
+    android:layout_marginEnd="8dp"
+    android:background="@drawable/bg_dark_thumb"
+    android:foreground="?attr/selectableItemBackground">
+
+    <ImageView
+        android:id="@+id/photoThumb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:id="@+id/selectionRing"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_photo_compact_selected"
+        android:visibility="gone" />
+</FrameLayout>

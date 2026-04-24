@@ -1,0 +1,228 @@
+{
+  "luts": [
+    {
+      "id": "lut:INS网红琥珀色11.cube",
+      "name": "INS网红琥珀色11",
+      "category": "精选",
+      "lutAssetPath": "favorite_luts/luts/INS网红琥珀色11.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/INS网红琥珀色11.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:colorslide/kodak_ektachrome_100_vs_generic.cube",
+      "name": "kodak_ektachrome_100_vs_generic",
+      "category": "colorslide",
+      "lutAssetPath": "favorite_luts/luts/colorslide/kodak_ektachrome_100_vs_generic.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/colorslide/kodak_ektachrome_100_vs_generic.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:colorslide/kodak_kodachrome_25.cube",
+      "name": "kodak_kodachrome_25",
+      "category": "colorslide",
+      "lutAssetPath": "favorite_luts/luts/colorslide/kodak_kodachrome_25.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/colorslide/kodak_kodachrome_25.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:colorslide/polaroid_690.cube",
+      "name": "polaroid_690",
+      "category": "colorslide",
+      "lutAssetPath": "favorite_luts/luts/colorslide/polaroid_690.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/colorslide/polaroid_690.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:fujixtransiii/fuji_xtrans_iii_pro_neg_hi.cube",
+      "name": "fuji_xtrans_iii_pro_neg_hi",
+      "category": "fujixtransiii",
+      "lutAssetPath": "favorite_luts/luts/fujixtransiii/fuji_xtrans_iii_pro_neg_hi.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/fujixtransiii/fuji_xtrans_iii_pro_neg_hi.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:fujixtransiii/fuji_xtrans_iii_pro_neg_std.cube",
+      "name": "fuji_xtrans_iii_pro_neg_std",
+      "category": "fujixtransiii",
+      "lutAssetPath": "favorite_luts/luts/fujixtransiii/fuji_xtrans_iii_pro_neg_std.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/fujixtransiii/fuji_xtrans_iii_pro_neg_std.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/fuji_fp-100c_--.cube",
+      "name": "fuji_fp-100c_--",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/fuji_fp-100c_--.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/fuji_fp-100c_--.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/fuji_fp-100c_cool.cube",
+      "name": "fuji_fp-100c_cool",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/fuji_fp-100c_cool.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/fuji_fp-100c_cool.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/fuji_fp-100c_cool_++.cube",
+      "name": "fuji_fp-100c_cool_++",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/fuji_fp-100c_cool_++.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/fuji_fp-100c_cool_++.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/fuji_fp-100c_negative_++_alt.cube",
+      "name": "fuji_fp-100c_negative_++_alt",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/fuji_fp-100c_negative_++_alt.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/fuji_fp-100c_negative_++_alt.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/fuji_fp-100c_negative_--.cube",
+      "name": "fuji_fp-100c_negative_--",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/fuji_fp-100c_negative_--.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/fuji_fp-100c_negative_--.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/polaroid_690_warm_++.cube",
+      "name": "polaroid_690_warm_++",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/polaroid_690_warm_++.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/polaroid_690_warm_++.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/polaroid_690_warm_+.cube",
+      "name": "polaroid_690_warm_+",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/polaroid_690_warm_+.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/polaroid_690_warm_+.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/polaroid_690_warm_--.cube",
+      "name": "polaroid_690_warm_--",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/polaroid_690_warm_--.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/polaroid_690_warm_--.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:instant_pro/polaroid_690_warm_-.cube",
+      "name": "polaroid_690_warm_-",
+      "category": "instant_pro",
+      "lutAssetPath": "favorite_luts/luts/instant_pro/polaroid_690_warm_-.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/instant_pro/polaroid_690_warm_-.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_color/fuji_superia_x-tra_800.cube",
+      "name": "fuji_superia_x-tra_800",
+      "category": "negative_color",
+      "lutAssetPath": "favorite_luts/luts/negative_color/fuji_superia_x-tra_800.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_color/fuji_superia_x-tra_800.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_color/kodak_portra_160_nc.cube",
+      "name": "kodak_portra_160_nc",
+      "category": "negative_color",
+      "lutAssetPath": "favorite_luts/luts/negative_color/kodak_portra_160_nc.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_color/kodak_portra_160_nc.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/fuji_400h_-.cube",
+      "name": "fuji_400h_-",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/fuji_400h_-.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/fuji_400h_-.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/fuji_800z_+.cube",
+      "name": "fuji_800z_+",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/fuji_800z_+.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/fuji_800z_+.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/kodak_portra_400_+.cube",
+      "name": "kodak_portra_400_+",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/kodak_portra_400_+.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/kodak_portra_400_+.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/kodak_portra_800.cube",
+      "name": "kodak_portra_800",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/kodak_portra_800.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/kodak_portra_800.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/kodak_portra_800_++.cube",
+      "name": "kodak_portra_800_++",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/kodak_portra_800_++.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/kodak_portra_800_++.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_new/kodak_portra_800_hc.cube",
+      "name": "kodak_portra_800_hc",
+      "category": "negative_new",
+      "lutAssetPath": "favorite_luts/luts/negative_new/kodak_portra_800_hc.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_new/kodak_portra_800_hc.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_old/kodak_portra_400_uc.cube",
+      "name": "kodak_portra_400_uc",
+      "category": "negative_old",
+      "lutAssetPath": "favorite_luts/luts/negative_old/kodak_portra_400_uc.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_old/kodak_portra_400_uc.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_old/kodak_portra_400_uc_++.cube",
+      "name": "kodak_portra_400_uc_++",
+      "category": "negative_old",
+      "lutAssetPath": "favorite_luts/luts/negative_old/kodak_portra_400_uc_++.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_old/kodak_portra_400_uc_++.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_old/kodak_portra_400_uc_+.cube",
+      "name": "kodak_portra_400_uc_+",
+      "category": "negative_old",
+      "lutAssetPath": "favorite_luts/luts/negative_old/kodak_portra_400_uc_+.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_old/kodak_portra_400_uc_+.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:negative_old/kodak_portra_400_uc_-.cube",
+      "name": "kodak_portra_400_uc_-",
+      "category": "negative_old",
+      "lutAssetPath": "favorite_luts/luts/negative_old/kodak_portra_400_uc_-.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/negative_old/kodak_portra_400_uc_-.jpg",
+      "starred": true
+    },
+    {
+      "id": "lut:旅拍胶片01.cube",
+      "name": "旅拍胶片01",
+      "category": "精选",
+      "lutAssetPath": "favorite_luts/luts/旅拍胶片01.cube",
+      "thumbnailAssetPath": "favorite_luts/thumbnails/旅拍胶片01.jpg",
+      "starred": true
+    }
+  ]
+}
